@@ -7,7 +7,7 @@ rem
 rem Needs Visual Studio 2022 or newer with the "Desktop development with C++" workload.
 setlocal EnableExtensions
 
-set "VERSION=2.0.0"
+set "VERSION=1.0.0"
 rem ^ keep in sync with src\plugin\Version.h
 
 set "ROOT=%~dp0"

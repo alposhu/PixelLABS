@@ -40,8 +40,8 @@
 
 Download from the [Releases](../../releases) page:
 
-- **`PixelLABS-Setup-2.0.0.exe`** (recommended). Choose *Just for me* (no admin) or *All users*. It installs into the standard VST3 folder and adds an uninstall entry under *Settings → Apps*. Run it again to update or uninstall.
-- **`PixelLABS-2.0.0-win64-vst3.zip`**: a portable copy. Copy the `PixelLABS.vst3` folder to `%LOCALAPPDATA%\Programs\Common\VST3` (just you) or `C:\Program Files\Common Files\VST3` (all users).
+- **`PixelLABS-Setup-1.0.0.exe`** (recommended). Choose *Just for me* (no admin) or *All users*. It installs into the standard VST3 folder and adds an uninstall entry under *Settings → Apps*. Run it again to update or uninstall.
+- **`PixelLABS-1.0.0-win64-vst3.zip`**: a portable copy. Copy the `PixelLABS.vst3` folder to `%LOCALAPPDATA%\Programs\Common\VST3` (just you) or `C:\Program Files\Common Files\VST3` (all users).
 
 Then restart your DAW or re-scan plug-ins, and add **Pixel LABS** as an instrument. In REAPER: *Options → Preferences → Plug-ins → VST → Re-scan* (use *Clear cache/re-scan* if it doesn't show up).
 
@@ -53,10 +53,10 @@ Windows may show a SmartScreen warning because the installer isn't code-signed. 
 
 | Command | What it does |
 |---|---|
-| `PixelLABS-Setup-2.0.0.exe /S` | install for the current user |
-| `PixelLABS-Setup-2.0.0.exe /S /allusers` | install for all users (asks for admin) |
-| `PixelLABS-Setup-2.0.0.exe /uninstall /S` | remove the per-user install (add `/allusers` for the machine-wide one) |
-| `PixelLABS-Setup-2.0.0.exe /S /dir=D:\VST3` | copy the plugin into a custom VST3 folder |
+| `PixelLABS-Setup-1.0.0.exe /S` | install for the current user |
+| `PixelLABS-Setup-1.0.0.exe /S /allusers` | install for all users (asks for admin) |
+| `PixelLABS-Setup-1.0.0.exe /uninstall /S` | remove the per-user install (add `/allusers` for the machine-wide one) |
+| `PixelLABS-Setup-1.0.0.exe /S /dir=D:\VST3` | copy the plugin into a custom VST3 folder |
 
 Exit codes: `0` success, `1` error, `2` cancelled.
 
@@ -99,7 +99,7 @@ build.bat        :: plugin + installer + zip  ->  dist\
 build.bat test   :: same, then run the automated host test
 ```
 
-The host test (`tests/test_vst3_host.cpp`) loads the built plugin like a DAW would. It checks that every preset makes sound without NaNs, that project state round-trips (including 1.x migration), and that the demo songs and on-screen keyboard work. It writes WAV renders and UI screenshots to `build\test-output\`.
+The host test (`tests/test_vst3_host.cpp`) loads the built plugin like a DAW would. It checks that every preset makes sound without NaNs, that project state round-trips (including state from pre-release builds), and that the demo songs and on-screen keyboard work. It writes WAV renders and UI screenshots to `build\test-output\`.
 
 A `CMakeLists.txt` is included for IDEs (plugin and test only; the installer is built by `build.bat`). To regenerate the icon, run `python scripts/make_icon.py` (needs Pillow).
 

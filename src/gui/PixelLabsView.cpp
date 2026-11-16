@@ -503,7 +503,7 @@ void PixelLabsView::drawHeader(PixelCanvas& c, const Palette& p) {
     const int lx = 16 + measurePixelText("PIXEL ", 3);
     drawPixelText(c, lx + 2, 12, "LABS", p.shadow, 3);
     drawPixelText(c, lx, 10, "LABS", p.ink, 3);
-    drawPixelText(c, 16, 38, "RETRO INSTRUMENT LAB  V2", p.muted, 1);
+    drawPixelText(c, 16, 38, "RETRO INSTRUMENT LAB  V1.0", p.muted, 1);
 
     // Preset display
     const int bx = 236, by = 8, bw = 392, bh = 40;
