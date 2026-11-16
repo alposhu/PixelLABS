@@ -1,0 +1,14 @@
+Pixel LABS - portable VST3 install
+==================================
+
+Copy the "PixelLABS.vst3" folder into one of these folders:
+
+  Just for you (no admin):  %LOCALAPPDATA%\Programs\Common\VST3
+  All users:                C:\Program Files\Common Files\VST3
+
+Then restart your DAW or re-scan plug-ins, and add "Pixel LABS" as an instrument.
+
+In REAPER: Options > Preferences > Plug-ins > VST > Re-scan
+(if it does not appear, use "Clear cache/re-scan").
+
+Prefer an installer? Use PixelLABS-Setup.exe from the same release.

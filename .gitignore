@@ -1,0 +1,18 @@
+# Build output (release binaries go on the GitHub Releases page, not in git)
+build/
+dist/
+
+# MSVC / IDE leftovers
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.res
+.vs/
+out/
+CMakeSettings.json
+
+# Generated audio / screenshots
+*.wav
+*.bmp
