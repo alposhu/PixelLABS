@@ -85,6 +85,12 @@ enum HarmonyModes {
     kNumHarmonyModes
 };
 
+// The Drum Kit oscillator has no harmony, so the Harmony parameter picks its kit.
+enum DrumKits {
+    kKitChip = 0, kKit808, kKitNes, kKitElectro, kKitDusty, kKitTavern, kKitWar, kKitHand, kNumDrumKits
+};
+static_assert(kNumDrumKits == kNumHarmonyModes, "one drum kit per harmony mode");
+
 enum ReverbTypes { kRevRoom = 0, kRevHall, kRevChurch, kRevCave, kNumReverbTypes };
 enum DelayTypes  { kDlyPing = 0, kDlyTape, kDly16Bit, kDlySlap, kDlyCanyon, kNumDelayTypes };
 
@@ -142,9 +148,11 @@ struct StateSnapshotV2 {
 };
 static constexpr int kNumFactoryPresetsV2 = 47;
 
+static constexpr int kNumFactoryPresetsV3 = 72; // PXL3 version 3 (1.1.x) stored the preset over 72 slots
+
 struct StateSnapshot {
     uint32_t magic = 0x50584C33; // 'PXL3'
-    uint32_t version = 3;
+    uint32_t version = 4;        // 4: preset stored over kNumFactoryPresets slots
     double params[kNumParams];
     int32_t activeMacroIndex = 0;
     int32_t theme = 0;
@@ -183,6 +191,8 @@ struct SharedUITelemetry {
 
     std::atomic<int> demoActive{0};
     std::atomic<int> demoSong{0};      // which built-in song the engine is playing
+    std::atomic<int> demoChoice{-1};   // song picked in the editor (-1 = follow the sound's era)
+    std::atomic<uint32_t> demoRestart{0}; // bumped by the editor to (re)start the picked song
     std::atomic<float> tempoBpm{125.0f};
     std::atomic<int> lastVelocity{0};  // raw 0..127 of the last played note (for the touch readout)
 

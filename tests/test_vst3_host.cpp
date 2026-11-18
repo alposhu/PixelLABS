@@ -3,6 +3,7 @@
 // Header-only constants (layout anchors, preset count); the test links only against the DLL.
 #include "../src/presets/FactoryPresets.h"
 #include "../src/gui/PixelLabsView.h"
+#include "../src/dsp/DemoSongs.h" // compiled into the test too, to check the song book
 
 namespace PixelLabs {
 static constexpr int kNumFactoryPresetsForTest = kNumFactoryPresets;
@@ -351,6 +352,64 @@ int main(int argc, char** argv) {
 
     const double kLast = PixelLabs::kNumFactoryPresetsForTest - 1;
 
+    // 2a. Demo song book
+    {
+        const std::vector<std::string> issues = PixelLabs::demoSongIssues();
+        for (const std::string& m : issues) std::printf("    %s\n", m.c_str());
+        CHECK(issues.empty(), "the demo song book parses cleanly");
+        const auto& songs = PixelLabs::demoSongs();
+        bool ok = songs.size() == static_cast<size_t>(PixelLabs::kNumDemoSongs);
+        int perGroup[PixelLabs::kNumDemoGroups] = {};
+        for (const auto& song : songs) {
+            ok = ok && song.numSteps > 0 && song.stepSec > 0.04 && song.stepSec < 0.5;
+            for (const auto& t : song.tracks) ok = ok && static_cast<int>(t.size()) == song.numSteps;
+            ++perGroup[song.group];
+        }
+        CHECK(ok, "every demo song has five full tracks");
+        CHECK(perGroup[PixelLabs::kDemoRetro] == 8 && perGroup[PixelLabs::kDemoMedieval] == 11 &&
+              perGroup[PixelLabs::kDemoAmbient] == 15, "8 retro, 11 medieval and 15 ambient demo songs");
+    }
+
+    // 2b. Drum kits: each of the 12 drums of every kit sounds, without NaNs or clipping
+    {
+        int kits = 0, silent = 0, loud = 0, broken = 0;
+        for (int i = 0; i < PixelLabs::kNumFactoryPresetsForTest; ++i) {
+            const PixelLabs::FactoryPreset& fp = PixelLabs::factoryPreset(i);
+            if (PixelLabs::normToList(fp.values[PixelLabs::kParamWaveform], PixelLabs::kNumWaveforms) != PixelLabs::kWaveDrums) continue;
+            ++kits;
+            ctrl->setParamNormalized(PixelLabs::kParamPreset, i / kLast);
+            std::printf("    %-20s", fp.name);
+            for (int d = 0; d < 12; ++d) {
+                SimpleEventList ev;
+                Event on = {};
+                on.type = Event::kNoteOnEvent;
+                on.noteOn.pitch = static_cast<int16>(48 + d);
+                on.noteOn.velocity = 0.9f;
+                on.noteOn.noteId = 300 + d;
+                ev.addEvent(on);
+                std::vector<float> L, R;
+                renderBlocks(proc, 60, 512, &L, &R, &ev);
+                SimpleEventList offs;
+                Event off = {};
+                off.type = Event::kNoteOffEvent;
+                off.noteOff.pitch = static_cast<int16>(48 + d);
+                off.noteOff.noteId = 300 + d;
+                offs.addEvent(off);
+                renderBlocks(proc, 1, 512, nullptr, nullptr, &offs);
+                renderBlocks(proc, 250, 512, nullptr, nullptr); // let rings and reverb die
+                const float pk = peakOf(L);
+                std::printf(" %.2f", pk);
+                if (pk < 0.03f) ++silent;
+                if (i >= 72 && pk > 0.97f) ++loud; // the 1.2 kits stay under the output ceiling
+                if (hasNaN(L) || hasNaN(R)) ++broken;
+            }
+            std::printf("\n");
+        }
+        CHECK(kits == 10, "ten drum kit presets");
+        CHECK(silent == 0 && broken == 0, "every drum of every kit sounds");
+        CHECK(loud == 0, "no drum of the new kits hits the output ceiling");
+    }
+
     // 2b. Keyboard touch: velocity sensitivity and curve
     {
         ctrl->setParamNormalized(PixelLabs::kParamPreset, 8.0 / kLast); // Pulse Hero Lead: velocity only sets level
@@ -403,6 +462,27 @@ int main(int argc, char** argv) {
                   "PXL3 remembers which sound is loaded");
             CHECK(std::fabs(s.refParams[PixelLabs::kParamPhaser] - PixelLabs::factoryPreset(30).values[PixelLabs::kParamPhaser]) < 1e-6,
                   "the edit stays an edit after reload (stored values kept apart)");
+        }
+
+        {
+            // 1.1 projects (PXL3 version 3) stored the preset over 72 slots
+            PixelLabs::StateSnapshot v3 = snapshotOf(comp);
+            v3.version = 3;
+            for (int i = 0; i < PixelLabs::kNumParams; ++i) {
+                v3.params[i] = PixelLabs::factoryPreset(46).values[i];
+                v3.refParams[i] = PixelLabs::factoryPreset(46).values[i];
+            }
+            v3.params[PixelLabs::kParamPreset] = v3.refParams[PixelLabs::kParamPreset] = 46.0 / 71.0;
+            v3.soundKind = 0;
+            v3.soundId = 46;
+            std::snprintf(v3.soundName, sizeof(v3.soundName), "%s", PixelLabs::factoryPreset(46).name);
+            MemStream s3;
+            s3.write(&v3, sizeof(v3), nullptr);
+            s3.pos = 0;
+            comp->setState(&s3);
+            CHECK(std::fabs(ctrl->getParamNormalized(PixelLabs::kParamPreset) - 46.0 / kLast) < 1e-4,
+                  "1.1 projects keep their preset slot");
+            CHECK(snapshotOf(comp).version == 4, "projects are saved as state version 4");
         }
 
         PixelLabs::StateSnapshotV2 v2 = {};
@@ -500,15 +580,15 @@ int main(int argc, char** argv) {
             fullR.insert(fullR.end(), R.begin(), R.end());
         }
 
-        // Drum kit + on-screen keyboard: click C2 (kick) on the keyboard
-        ctrl->setParamNormalized(PixelLabs::kParamPreset, 46.0 / kLast);
+        // Drum kit + on-screen keyboard: click C2 (low conga) on the keyboard
+        ctrl->setParamNormalized(PixelLabs::kParamPreset, 78.0 / kLast); // Hand Drum Circle
         SendMessageW(childWnd, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(24, 580));
         std::vector<float> kL, kR;
         renderBlocks(proc, 8, 512, &kL, &kR);
         SendMessageW(childWnd, WM_TIMER, 1001, 0);
         saveWindowBmp(childWnd, r.getWidth(), r.getHeight(), outPath("ui_sfx_kit.bmp").c_str());
         SendMessageW(childWnd, WM_LBUTTONUP, 0, MAKELPARAM(24, 580));
-        CHECK(peakOf(kL) > 0.05f, "clicking an on-screen key plays the kick");
+        CHECK(peakOf(kL) > 0.05f, "clicking an on-screen key plays the drum");
 
         // Cycle skins (AUTO -> NES -> ... -> PAPER) and save the NEON and PAPER looks
         ctrl->setParamNormalized(PixelLabs::kParamPreset, 23.0 / kLast);
@@ -520,6 +600,65 @@ int main(int argc, char** argv) {
             }
         }
         click(PixelLabs::PixelLabsView_kThemeX, PixelLabs::PixelLabsView_kThemeY); // PAPER -> GILDED for the library shots
+
+        // ---- Demo song picker: every song plays from the list ----
+        {
+            using V = PixelLabs::PixelLabsView;
+            auto frameP = [&]() { SendMessageW(childWnd, WM_TIMER, 1001, 0); };
+            auto clickP = [&](int x, int y) { frameP(); click(x, y); frameP(); };
+            auto pickSong = [&](int group, int row) {
+                clickP(V::songTabX(group) + V::kSongTabW / 2, V::kSongTabY + 13);
+                clickP(V::songRowX(row / V::kSongRows) + 60, V::kSongRowsTop + (row % V::kSongRows) * V::kSongRowH + 10);
+            };
+            ctrl->setParamNormalized(PixelLabs::kParamPreset, 79.0 / kLast); // Felt Room Keys
+            clickP(V::kDemoListX, V::kDemoBtnY);                               // open the song list
+            int played = 0, quiet = 0, broken = 0;
+            for (int g = 0; g < PixelLabs::kNumDemoGroups; ++g) {
+                int ids[PixelLabs::kNumDemoSongs];
+                const int n = PixelLabs::demoGroupSongs(g, ids, PixelLabs::kNumDemoSongs);
+                for (int i = 0; i < n; ++i) {
+                    pickSong(g, i);
+                    std::vector<float> L, R;
+                    renderBlocks(proc, 80, 1200, &L, &R); // 2 s
+                    if (g == PixelLabs::kDemoAmbient && i == 0) {
+                        frameP();
+                        saveWindowBmp(childWnd, r.getWidth(), r.getHeight(), outPath("ui_song_picker.bmp").c_str());
+                    }
+                    ++played;
+                    if (peakOf(L) < 0.01f) ++quiet;
+                    if (hasNaN(L) || hasNaN(R)) ++broken;
+                }
+            }
+            CHECK(played == PixelLabs::kNumDemoSongs, "the song list holds all 34 demo songs");
+            CHECK(quiet == 0 && broken == 0, "every demo song plays from the song list");
+            clickP(V::kSongStopX + 60, V::kSongBtnY + 15);   // STOP
+            clickP(V::kSongDoneX + 55, V::kSongBtnY + 15);   // DONE
+            renderBlocks(proc, 200, 1200, nullptr, nullptr);
+            std::vector<float> after;
+            renderBlocks(proc, 20, 1200, &after, nullptr);
+            CHECK(peakOf(after) < 0.001f, "STOP in the song list stops the demo");
+
+            // One new song per group on a sound that suits it, 20 s each
+            struct Preview { int preset, group, row; const char* wav; };
+            const Preview previews[] = {
+                { 0,  PixelLabs::kDemoRetro,    5, "demo_new_retro_starfield_run.wav" },
+                { 27, PixelLabs::kDemoMedieval, 1, "demo_new_medieval_lantern_estampie.wav" },
+                { 79, PixelLabs::kDemoAmbient,  0, "demo_new_ambient_first_light.wav" },
+            };
+            for (const Preview& pv : previews) {
+                ctrl->setParamNormalized(PixelLabs::kParamPreset, pv.preset / kLast);
+                clickP(V::kDemoListX, V::kDemoBtnY);
+                pickSong(pv.group, pv.row);
+                clickP(V::kSongDoneX + 55, V::kSongBtnY + 15);
+                std::vector<float> L, R;
+                renderBlocks(proc, 800, 1200, &L, &R);
+                click(PixelLabs::PixelLabsView_kDemoX, PixelLabs::PixelLabsView_kDemoY); // stop
+                renderBlocks(proc, 160, 1200, &L, &R);
+                std::printf("    %-40s peak %.3f\n", pv.wav, peakOf(L));
+                writeWavFile(outPath(pv.wav).c_str(), L, R, 48000);
+            }
+            CHECK(snapshotOf(comp).theme == PixelLabs::kThemeGilded, "the song list leaves the skin alone");
+        }
 
         // ---- 5. Library: save as, unsaved-changes prompt, favourites, banks ----
         using V = PixelLabs::PixelLabsView;

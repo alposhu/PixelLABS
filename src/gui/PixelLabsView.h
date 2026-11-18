@@ -20,7 +20,8 @@ public:
     static constexpr int kBaseHeight = 600;
 
     // Layout anchors (logical pixels) - also used by the test host to click things.
-    static constexpr int kDemoBtnX = 700, kDemoBtnY = 26;
+    static constexpr int kDemoBtnX = 700, kDemoBtnY = 26;       // play / stop
+    static constexpr int kDemoListX = 727;                         // the song list arrow beside it
     static constexpr int kThemeBtnX = 800, kThemeBtnY = 26;
     static constexpr int kKeyboardTop = 446, kKeyboardBottom = 592;
     static constexpr int kKeyboardLeft = 12, kWhiteKeyW = 26;
@@ -59,6 +60,15 @@ public:
     static constexpr int kPickX = 268, kPickY = 128, kPickW = 424, kPickH = 344;
     static constexpr int kPickRowsTop = kPickY + 58, kPickRowH = 22, kPickRows = 9;
     static constexpr int kPickDoneX = kPickX + kPickW - 130, kPickBtnY = kPickY + 292;
+    // Demo song picker: group tabs over two columns of songs
+    static constexpr int kSongX = 200, kSongY = 104, kSongW = 560, kSongH = 392;
+    static constexpr int kSongTabY = kSongY + 62, kSongTabW = 160, kSongTabGap = 8;
+    static constexpr int kSongRowsTop = kSongY + 100, kSongRowH = 22, kSongRows = 8;
+    static constexpr int kSongColW = 248;
+    static int songTabX(int g) { return kSongX + 26 + g * (kSongTabW + kSongTabGap); }
+    static int songRowX(int col) { return kSongX + 24 + col * (kSongColW + 16); }
+    static constexpr int kSongBtnY = kSongY + 330;
+    static constexpr int kSongStopX = kSongX + 26, kSongDoneX = kSongX + kSongW - 136;
 
     static int zoomPercent(int scaleIdx);
 
@@ -124,11 +134,16 @@ private:
         kHitModalButton,   // a = DialogButton
         kHitNameKey,       // a = character (8 = delete, 127 = clear)
         kHitPickerBank,    // a = bank id
-        kHitPickerNew
+        kHitPickerNew,
+        // Demo songs
+        kHitDemoList,
+        kHitSongGroup,     // a = DemoGroups
+        kHitSongRow,       // a = song index
+        kHitSongStop
     };
     struct Hit { int x, y, w, h, kind, a; };
 
-    enum ModalKind { kModalNone = 0, kModalName, kModalConfirm, kModalBankPicker };
+    enum ModalKind { kModalNone = 0, kModalName, kModalConfirm, kModalBankPicker, kModalSongPicker };
     enum NamePurpose { kNameSaveSound = 0, kNameNewBank, kNameRenameSound, kNameRenameBank };
     enum AfterSave { kAfterNothing = 0, kAfterLoadPending, kAfterBankPicker };
     enum ConfirmPurpose { kConfirmUnsaved = 0, kConfirmDeleteSound, kConfirmDeleteBank };
@@ -153,6 +168,8 @@ private:
         // bank picker
         SoundKey pickerKey;
         int pickerScroll = 0;
+        // demo song picker
+        int songGroup = 0;
     };
 
     std::atomic<uint32_t> refCount_{1};
@@ -220,6 +237,7 @@ private:
     void drawNameDialog(PixelCanvas& c, const Palette& p);
     void drawConfirmDialog(PixelCanvas& c, const Palette& p);
     void drawBankPicker(PixelCanvas& c, const Palette& p);
+    void drawSongPicker(PixelCanvas& c, const Palette& p);
 
     void addHit(int x, int y, int w, int h, int kind, int a = 0);
     const Hit* hitAt(int x, int y) const;
@@ -249,6 +267,9 @@ private:
     void openConfirm(int purpose, const std::string& title, const std::string& l1, const std::string& l2,
                      std::vector<int> buttons);
     void openBankPicker(const SoundKey& key);
+    void openSongPicker();
+    int nextDemoSong() const;      // what DEMO plays: the picked song, else the sound's era song
+    void playDemoSong(int index);
     void closeModal();
     void commitName();
     void pressDialogButton(int button);

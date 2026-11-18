@@ -135,11 +135,25 @@ static const SliderDef kSliders[16] = {
     { kParamArpRate,   "ARP RATE"}, { kParamExpression,   "VOLUME"  }
 };
 
-static const char* kDrumNames[12] = {
-    "KICK", "RIM", "SNARE", "CLAP", "TIGHT SN", "LO TOM", "C.HAT", "MID TOM", "O.HAT", "HI TOM", "CRASH", "COWBELL"
+static const char* kDrumNames[kNumDrumKits][12] = {
+    { "KICK", "RIM", "SNARE", "CLAP", "TIGHT SN", "LO TOM", "C.HAT", "MID TOM", "O.HAT", "HI TOM", "CRASH", "COWBELL" },
+    { "808 KICK", "RIM", "SNARE", "CLAP", "TIGHT SN", "LO TOM", "C.HAT", "MID TOM", "O.HAT", "HI TOM", "CYMBAL", "COWBELL" },
+    { "TRI KICK", "CLICK", "SNARE", "METAL", "HISS SN", "LO TOM", "C.HAT", "MID TOM", "O.HAT", "HI TOM", "CRASH", "BLIP" },
+    { "KICK", "RIM", "SNARE", "CLAP", "TIGHT SN", "LO TOM", "C.HAT", "MID TOM", "O.HAT", "HI TOM", "CRASH", "COWBELL" },
+    { "KICK", "CLICK", "SNARE", "CLAP", "GHOST SN", "LO TOM", "C.HAT", "MID TOM", "O.HAT", "HI TOM", "RIDE", "SHAKER" },
+    { "FRAME DRUM", "WOOD BLOCK", "TABOR", "CLAP", "TEK", "DOUM", "TAMB SHAKE", "LOW TABOR", "TAMBOURINE", "NAKERS", "ZILLS", "HAND BELL" },
+    { "GREAT DRUM", "RIM", "FIELD SN", "CLAP", "WAR DRUM", "LO TIMP", "CHAINS", "MID TIMP", "GONG", "HI TIMP", "CRASH", "ANVIL" },
+    { "LO CONGA", "CLAVES", "SLAP", "SNAP", "OPEN CONGA", "DJEMBE", "SHAKER", "LO BONGO", "LONG SHAKE", "HI BONGO", "CABASA", "AGOGO" }
 };
-static const char* kDrumKeyLabels[12] = {
-    "KIK", "RM", "SNR", "CP", "TSN", "LTM", "CH", "MTM", "OH", "HTM", "CR", "BEL"
+static const char* kDrumKeyLabels[kNumDrumKits][12] = {
+    { "KIK", "RM", "SNR", "CP", "TSN", "LTM", "CH", "MTM", "OH", "HTM", "CR", "BEL" },
+    { "KIK", "RM", "SNR", "CP", "TSN", "LTM", "CH", "MTM", "OH", "HTM", "CY", "BEL" },
+    { "KIK", "CLK", "SNR", "MTL", "HSN", "LTM", "CH", "MTM", "OH", "HTM", "CR", "BLP" },
+    { "KIK", "RM", "SNR", "CP", "TSN", "LTM", "CH", "MTM", "OH", "HTM", "CR", "BEL" },
+    { "KIK", "CLK", "SNR", "CP", "GSN", "LTM", "CH", "MTM", "OH", "HTM", "RD", "SHK" },
+    { "FRM", "WD", "TAB", "CP", "TEK", "DUM", "TMS", "LTB", "TMB", "NAK", "ZIL", "BEL" },
+    { "GRT", "RM", "SNR", "CP", "WAR", "LTP", "CHN", "MTP", "GNG", "HTP", "CR", "ANV" },
+    { "LCG", "CLV", "SLP", "SNP", "OCG", "DJB", "SHK", "LBG", "LSH", "HBG", "CAB", "AGO" }
 };
 
 static int countBits(int m) { int n = 0; while (m) { n += m & 1; m >>= 1; } return n; }
@@ -778,6 +792,25 @@ void PixelLabsView::openBankPicker(const SoundKey& key) {
     modal_.pickerKey = key;
 }
 
+void PixelLabsView::openSongPicker() {
+    releaseHeldNotes();
+    modal_ = Modal();
+    modal_.kind = kModalSongPicker;
+    const bool playing = telemetry_->demoActive.load(std::memory_order_relaxed) != 0;
+    modal_.songGroup = demoSongGroup(playing ? telemetry_->demoSong.load(std::memory_order_relaxed) : nextDemoSong());
+}
+
+int PixelLabsView::nextDemoSong() const {
+    const int choice = telemetry_->demoChoice.load(std::memory_order_relaxed);
+    return (choice >= 0 && choice < kNumDemoSongs) ? choice : demoSongForEra(cur_.era);
+}
+
+void PixelLabsView::playDemoSong(int index) {
+    telemetry_->demoChoice.store(std::clamp(index, 0, kNumDemoSongs - 1), std::memory_order_relaxed);
+    telemetry_->demoActive.store(1, std::memory_order_relaxed);
+    telemetry_->demoRestart.fetch_add(1, std::memory_order_release);
+}
+
 void PixelLabsView::closeModal() {
     modal_ = Modal();
 }
@@ -885,7 +918,7 @@ void PixelLabsView::pressDialogButton(int btn) {
         closeModal();
         return;
     }
-    if (modal_.kind == kModalBankPicker) { closeModal(); return; }
+    if (modal_.kind == kModalBankPicker || modal_.kind == kModalSongPicker) { closeModal(); return; }
     if (modal_.kind != kModalConfirm) return;
 
     switch (modal_.confirmPurpose) {
@@ -1036,15 +1069,28 @@ void PixelLabsView::drawHeader(PixelCanvas& c, const Palette& p) {
     ui::text(c, ui::kFontBody, sx, by + 24, sub, mix(plaqueInk, face, 50));
     if (modified_) ui::text(c, ui::kFontBody, sx + ui::textWidth(ui::kFontBody, sub), by + 24, edited, accentOn(p, face, p.accent3));
 
-    // Demo button
+    // Demo button: play / stop on the left, the song list on the right
     const bool demo = telemetry_->demoActive.load(std::memory_order_relaxed) != 0;
     {
         const int x = 640, y = 10, w = 104, h = 34;
-        const bool hv = hovered(x, y, w, h);
-        const uint32_t f = bar(c, x, y, w, h, demo, hv);
+        const int listX = 712, mainW = listX - x;
+        const bool hvMain = hovered(x, y, mainW, h), hvList = hovered(listX, y, x + w - listX, h);
+        const bool hv = hvMain;
+        const uint32_t f = bar(c, x, y, w, h, demo, hvMain || hvList);
         const int ty = barY(y, h) + (kBarH - ui::capHeight(ui::kFontTitle)) / 2;
         const int tw = 12 + ui::textWidth(ui::kFontTitle, "DEMO");
-        const int tx = x + (w - tw) / 2;
+        const int tx = x + 4 + (mainW - 4 - tw) / 2;
+        // divider and the list arrow
+        const int barTop = barY(y, h);
+        c.fillRect(listX, barTop + 4, 1, kBarH - 8, ui::shadeColor(f, -70));
+        c.fillRect(listX + 1, barTop + 4, 1, kBarH - 8, ui::shadeColor(f, 40));
+        {
+            const uint32_t ac = accentOn(p, f, hvList ? p.accent3 : p.accent);
+            const int ax = listX + (x + w - listX) / 2 - 1, ay = barTop + kBarH / 2 - 2;
+            for (int i = 0; i < 4; ++i) c.fillRect(ax - 3 + i + 1, ay + i + 1, 7 - 2 * i, 1, p.shadow);
+            for (int i = 0; i < 4; ++i) c.fillRect(ax - 3 + i, ay + i, 7 - 2 * i, 1, ac);
+        }
+        addHit(listX, y, x + w - listX, h, kHitDemoList);
         if (demo) {
             const bool blink = (frame_ / 10) & 1;
             c.fillRect(tx, ty + 1, 8, 8, blink ? accentOn(p, f, p.accent3) : inkOn(p, f));
@@ -1052,7 +1098,7 @@ void PixelLabsView::drawHeader(PixelCanvas& c, const Palette& p) {
             arrow(c, p, tx + 3, ty + 5, 6, 1, accentOn(p, f, hv ? p.accent3 : p.accent));
         }
         ui::text(c, ui::kFontTitle, tx + 12, ty, "DEMO", (hv && !demo) ? accentOn(p, f, p.accent) : inkOn(p, f));
-        addHit(x, y, w, h, kHitDemo);
+        addHit(x, y, mainW, h, kHitDemo);
     }
     // Skin button
     {
@@ -1436,17 +1482,21 @@ void PixelLabsView::drawSoundPanel(PixelCanvas& c, const Palette& p) {
     ui::textRight(c, ui::kFontTiny, x + w - 26, y + 16, "DBL-CLICK = RESET", p.border, 1);
 
     // List steppers
+    const bool drumOsc = normToList(param(kParamWaveform), kNumWaveforms) == kWaveDrums;
     for (int i = 0; i < 4; ++i) {
         const StepperDef& s = kSteppers[i];
+        const bool kitRow = drumOsc && s.param == kParamHarmony;
         const int ry = y + 30 + i * 21, rh = 19;
-        ui::text(c, ui::kFontBody, x + 16, ry + (rh - ui::capHeight(ui::kFontBody)) / 2, s.label, p.muted);
+        ui::text(c, ui::kFontBody, x + 16, ry + (rh - ui::capHeight(ui::kFontBody)) / 2, kitRow ? "KIT" : s.label,
+                 kitRow ? p.accent : p.muted);
         const int bx = x + 58, bw = w - 74;
         const bool hp = hovered(bx, ry, bw / 2, rh), hn = hovered(bx + bw / 2, ry, bw - bw / 2, rh);
         const uint32_t f = flat(c, bx, ry, bw, rh, hp || hn);
         arrow(c, p, bx + 10, ry + rh / 2, 5, -1, accentOn(p, f, hp ? p.accent3 : p.accent));
         arrow(c, p, bx + bw - 10, ry + rh / 2, 5, 1, accentOn(p, f, hn ? p.accent3 : p.accent));
         char buf[48];
-        formatParamValue(s.param, param(s.param), buf, sizeof(buf));
+        if (kitRow) std::snprintf(buf, sizeof(buf), "%s", drumKitName(normToList(param(s.param), kNumDrumKits)));
+        else formatParamValue(s.param, param(s.param), buf, sizeof(buf));
         const int idx = normToList(param(s.param), s.count);
         const int ty = ry + (rh - ui::capHeight(ui::kFontBody)) / 2;
         ui::textCentered(c, ui::kFontBody, bx + bw / 2 + 8, ty, buf, inkOn(p, f));
@@ -1515,6 +1565,7 @@ void PixelLabsView::drawStatusStrip(PixelCanvas& c, const Palette& p) {
         if (lowest < 0) lowest = n;
     }
     const bool drums = normToList(param(kParamWaveform), kNumWaveforms) == kWaveDrums;
+    const int kit = normToList(param(kParamHarmony), kNumDrumKits);
     const int notesRight = kTouchX - 8;
 
     // Hover readout (from last frame's hit map: later sections have not added theirs yet)
@@ -1541,6 +1592,10 @@ void PixelLabsView::drawStatusStrip(PixelCanvas& c, const Palette& p) {
             for (const auto& s : kSliders) if (s.param == pid) label = s.label;
             for (const auto& s : kSteppers) if (s.param == pid) label = s.label;
             for (int m = 0; m < kNumMacros; ++m) if (kMacroParamIds[m] == pid) label = kMacroNames[m];
+            if (pid == kParamHarmony && drums) {
+                label = "DRUM KIT";
+                std::snprintf(v, sizeof(v), "%s", drumKitName(kit));
+            }
             std::snprintf(info, sizeof(info), "%s: %s", label, v);
         } else if (hh->kind == kHitKeyboard) {
             const int k = keyAt(hoverX_, hoverY_);
@@ -1574,6 +1629,11 @@ void PixelLabsView::drawStatusStrip(PixelCanvas& c, const Palette& p) {
             std::snprintf(info, sizeof(info), "SKIN: CLICK FOR THE NEXT ONE  (AUTO FOLLOWS THE SOUND'S ERA)");
         } else if (hh->kind == kHitZoom) {
             std::snprintf(info, sizeof(info), "WINDOW SIZE");
+        } else if (hh->kind == kHitDemo) {
+            if (telemetry_->demoActive.load(std::memory_order_relaxed)) std::snprintf(info, sizeof(info), "STOP THE DEMO SONG");
+            else std::snprintf(info, sizeof(info), "PLAY DEMO: %s", demoSongName(nextDemoSong()));
+        } else if (hh->kind == kHitDemoList) {
+            std::snprintf(info, sizeof(info), "CHOOSE ONE OF THE %d DEMO SONGS", kNumDemoSongs);
         }
     }
 
@@ -1596,9 +1656,16 @@ void PixelLabsView::drawStatusStrip(PixelCanvas& c, const Palette& p) {
         }
     } else {
         const int noteY = y + (h - ui::capHeight(ui::kFontTitle)) / 2;
+        if (telemetry_->demoActive.load(std::memory_order_relaxed)) {
+            const char* song = demoSongName(telemetry_->demoSong.load(std::memory_order_relaxed));
+            const int sw = std::min(ui::textWidth(ui::kFontBody, song) + 20, 200);
+            ui::hbar(c, g_skin, ui::kSprFlatMid, tx - 6, y + 7, sw, 4);
+            ui::textFit(c, ui::kFontBody, tx + 4, textY, sw - 16, song, accentOn(p, faceColor(ui::kSprFlatMid), p.accent3));
+            tx += sw + 6;
+        }
         for (int i = 0; i < count && i < 8 && tx < notesRight - 60; ++i) {
             char nb[16];
-            if (drums) std::snprintf(nb, sizeof(nb), "%s", kDrumNames[notes[i] % 12]);
+            if (drums) std::snprintf(nb, sizeof(nb), "%s", kDrumNames[kit][notes[i] % 12]);
             else std::snprintf(nb, sizeof(nb), "%s%d", noteName(notes[i]), noteOctave(notes[i]));
             ui::textShadow(c, ui::kFontTitle, tx, noteY, nb, p.ink, p.shadow);
             tx += ui::textWidth(ui::kFontTitle, nb) + 10;
@@ -1702,6 +1769,7 @@ void PixelLabsView::drawKeyboard(PixelCanvas& c, const Palette& p) {
     const uint64_t hi = telemetry_->activeNotesHigh.load(std::memory_order_relaxed);
     auto isOn = [&](int n) { return n < 64 ? ((lo >> n) & 1ull) != 0 : ((hi >> (n - 64)) & 1ull) != 0; };
     const bool drums = normToList(param(kParamWaveform), kNumWaveforms) == kWaveDrums;
+    const int kit = normToList(param(kParamHarmony), kNumDrumKits);
     const int hoverKey = (dragKind_ == kHitNone && hoverY_ >= top && hoverY_ < bottom) ? keyAt(hoverX_, hoverY_) : -1;
     const int pcBase = (kbdOctave_ + 1) * 12;
 
@@ -1731,7 +1799,7 @@ void PixelLabsView::drawKeyboard(PixelCanvas& c, const Palette& p) {
             std::snprintf(oct, sizeof(oct), "%d", noteOctave(n));
             ui::textCentered(c, ui::kFontTiny, kx + (ww - 2) / 2, bottom - 34, oct, on ? ink : p.accent, 1);
         }
-        if (drums) ui::textCentered(c, ui::kFontTiny, kx + (ww - 2) / 2, top + blackH + 8, kDrumKeyLabels[n % 12], on ? ink : p.muted, 1);
+        if (drums) ui::textCentered(c, ui::kFontTiny, kx + (ww - 2) / 2, top + blackH + 8, kDrumKeyLabels[kit][n % 12], on ? ink : p.muted, 1);
         // PC-keyboard range marker
         if (n >= pcBase && n <= pcBase + 16) c.fillRect(kx + 4, bottom - 4, ww - 10, 2, p.accent2);
     }
@@ -1749,7 +1817,7 @@ void PixelLabsView::drawKeyboard(PixelCanvas& c, const Palette& p) {
             c.fillRect(kx + 1, top + blackH - 6, blackW - 2, 1, roleColor(p, ui::kRoleCamel));
             if (n == hoverKey) blendRect(c, kx, top, blackW, blackH, p.accent, 70);
         }
-        const char* label = drums ? kDrumKeyLabels[n % 12] : noteName(n);
+        const char* label = drums ? kDrumKeyLabels[kit][n % 12] : noteName(n);
         ui::textCentered(c, ui::kFontTiny, kx + blackW / 2, top + blackH - 18, label, on ? p.keyHitInk : p.keyBlackInk, 1);
     }
 }
@@ -1766,6 +1834,7 @@ void PixelLabsView::drawModal(PixelCanvas& c, const Palette& p) {
         case kModalName:       drawNameDialog(c, p); break;
         case kModalConfirm:    drawConfirmDialog(c, p); break;
         case kModalBankPicker: drawBankPicker(c, p); break;
+        case kModalSongPicker: drawSongPicker(c, p); break;
         default: break;
     }
     drawingModal_ = false;
@@ -1908,6 +1977,75 @@ void PixelLabsView::drawBankPicker(PixelCanvas& c, const Palette& p) {
                 p.muted);
     button(c, p, kPickDoneX, kPickBtnY, 110, 30, "DONE", true, hovered(kPickDoneX, kPickBtnY, 110, 30));
     addHit(kPickDoneX, kPickBtnY, 110, 30, kHitModalButton, kBtnDone);
+}
+
+void PixelLabsView::drawSongPicker(PixelCanvas& c, const Palette& p) {
+    const int x = kSongX, y = kSongY, w = kSongW, h = kSongH;
+    framePanel(c, x, y, w, h);
+    ui::textShadow(c, ui::kFontTitle, x + 26, y + 16, "DEMO SONGS", p.accent, p.shadow, 2);
+    ui::textRight(c, ui::kFontLight, x + w - 28, y + 22, "THEY PLAY ON THE LOADED SOUND", p.muted);
+
+    const bool playing = telemetry_->demoActive.load(std::memory_order_relaxed) != 0;
+    const int playingSong = playing ? telemetry_->demoSong.load(std::memory_order_relaxed) : -1;
+
+    // Group tabs
+    for (int g = 0; g < kNumDemoGroups; ++g) {
+        const int tx = songTabX(g);
+        const bool active = (g == modal_.songGroup);
+        const bool hv = hovered(tx, kSongTabY, kSongTabW, 26);
+        const uint32_t f = bar(c, tx, kSongTabY, kSongTabW, 26, active, hv, active);
+        int ids[kNumDemoSongs];
+        char label[32];
+        std::snprintf(label, sizeof(label), "%s  %d", demoGroupName(g), demoGroupSongs(g, ids, kNumDemoSongs));
+        const int ty = barY(kSongTabY, 26) + (kBarH - ui::capHeight(ui::kFontTitle)) / 2;
+        ui::textCentered(c, ui::kFontTitle, tx + kSongTabW / 2, ty, label,
+                         active ? inkOn(p, f) : (hv ? accentOn(p, f, p.accent) : mutedOn(p, f)));
+        addHit(tx, kSongTabY, kSongTabW, 26, kHitSongGroup, g);
+    }
+
+    // Songs in two columns
+    int ids[kNumDemoSongs];
+    const int n = demoGroupSongs(modal_.songGroup, ids, kNumDemoSongs);
+    well(c, p, x + 20, kSongRowsTop - 4, w - 40, kSongRows * kSongRowH + 6);
+    for (int i = 0; i < n && i < 2 * kSongRows; ++i) {
+        const int col = i / kSongRows, row = i % kSongRows;
+        const int rx = songRowX(col), ry = kSongRowsTop + row * kSongRowH;
+        const int rw = kSongColW, rh = kSongRowH - 2;
+        const bool hv = hovered(rx, ry, rw, rh);
+        const bool on = (ids[i] == playingSong);
+        uint32_t face = p.inset;
+        if (on) { ui::hbar(c, g_skin, ui::kSprFlatGilt, rx, ry + (rh - kFlatH) / 2, rw, 4); face = faceColor(ui::kSprFlatGilt); }
+        else if (hv) { ui::hbar(c, g_skin, ui::kSprFlatMid, rx, ry + (rh - kFlatH) / 2, rw, 4); face = faceColor(ui::kSprFlatMid); }
+        const int ty = ry + (rh - ui::capHeight(ui::kFontBody)) / 2;
+        char num[8];
+        std::snprintf(num, sizeof(num), "%02d", i + 1);
+        ui::text(c, ui::kFontBody, rx + 8, ty, num, mutedOn(p, face));
+        if (on) {
+            const bool blink = (frame_ / 10) & 1;
+            c.fillRect(rx + rw - 16, ty + 1, 7, 7, blink ? accentOn(p, face, p.accent3) : inkOn(p, face));
+        }
+        ui::textFit(c, ui::kFontBody, rx + 30, ty, rw - 52, demoSongName(ids[i]),
+                    on ? inkOn(p, face) : (hv ? accentOn(p, face, p.accent) : inkOn(p, face)));
+        addHit(rx, ry, rw, rh, kHitSongRow, ids[i]);
+    }
+
+    ui::textFit(c, ui::kFontLight, x + 26, kSongRowsTop + kSongRows * kSongRowH + 14, w - 52,
+                demoGroupHint(modal_.songGroup), p.muted);
+
+    // STOP / DONE
+    {
+        const bool hv = playing && hovered(kSongStopX, kSongBtnY, 120, 30);
+        const uint32_t f = bar(c, kSongStopX, kSongBtnY, 120, 30, false, hv);
+        const int ty = barY(kSongBtnY, 30) + (kBarH - ui::capHeight(ui::kFontTitle)) / 2;
+        const uint32_t col = playing ? (hv ? accentOn(p, f, p.accent) : inkOn(p, f)) : mutedOn(p, f);
+        const int tw = 12 + ui::textWidth(ui::kFontTitle, "STOP");
+        const int tx = kSongStopX + (120 - tw) / 2;
+        c.fillRect(tx, ty + 1, 8, 8, col);
+        ui::text(c, ui::kFontTitle, tx + 12, ty, "STOP", col);
+        if (playing) addHit(kSongStopX, kSongBtnY, 120, 30, kHitSongStop);
+    }
+    button(c, p, kSongDoneX, kSongBtnY, 110, 30, "DONE", true, hovered(kSongDoneX, kSongBtnY, 110, 30));
+    addHit(kSongDoneX, kSongBtnY, 110, 30, kHitModalButton, kBtnDone);
 }
 
 // =============================================================================
@@ -2093,6 +2231,10 @@ void PixelLabsView::handleMouseDown(int x, int y) {
             telemetry_->demoActive.store(cur ? 0 : 1, std::memory_order_release);
             break;
         }
+        case kHitDemoList: openSongPicker(); break;
+        case kHitSongGroup: modal_.songGroup = std::clamp(hit.a, 0, kNumDemoGroups - 1); break;
+        case kHitSongRow: playDemoSong(hit.a); break;
+        case kHitSongStop: telemetry_->demoActive.store(0, std::memory_order_release); break;
         case kHitTheme: {
             const int t = telemetry_->theme.load(std::memory_order_relaxed);
             telemetry_->theme.store((t + 1) % kNumThemes, std::memory_order_relaxed);
@@ -2183,7 +2325,7 @@ void PixelLabsView::handleWheel(int x, int y, float steps) {
 bool PixelLabsView::handleModalKey(int vk) {
     switch (vk) {
         case VK_ESCAPE:
-            pressDialogButton(modal_.kind == kModalBankPicker ? kBtnDone : kBtnCancel);
+            pressDialogButton((modal_.kind == kModalBankPicker || modal_.kind == kModalSongPicker) ? kBtnDone : kBtnCancel);
             return true;
         case VK_RETURN:
             if (modal_.kind == kModalName) pressDialogButton(kBtnOk);

@@ -44,6 +44,7 @@ endif()
 add_library(PixelLABS SHARED
     "${UI_ASSETS_INC}"
     src/dsp/RetroSynthEngine.cpp
+    src/dsp/DemoSongs.cpp
     src/gui/PixelLabsView.cpp
     src/library/SoundLibrary.cpp
     src/plugin/PixelLabsPlugin.cpp
@@ -61,7 +62,7 @@ set_target_properties(PixelLABS PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${BUNDLE_DIR}"
 )
 
-add_executable(test_vst3_host tests/test_vst3_host.cpp)
+add_executable(test_vst3_host tests/test_vst3_host.cpp src/dsp/DemoSongs.cpp)
 target_include_directories(test_vst3_host PRIVATE include)
 target_link_libraries(test_vst3_host PRIVATE user32 gdi32)
 add_dependencies(test_vst3_host PixelLABS)

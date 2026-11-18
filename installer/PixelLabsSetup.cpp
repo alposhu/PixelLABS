@@ -258,7 +258,7 @@ int interactive(Options& o) {
 
     const std::wstring title = std::wstring(kProductName) + L" " + kVersion + L" Setup";
     const std::wstring content =
-        L"A retro pixel-art synthesizer: 72 presets across 80s chip, 90s handheld, 80s synth, "
+        L"A retro pixel-art synthesizer: 80 presets across 80s chip, 90s handheld, 80s synth, "
         L"medieval and game-SFX sounds, with 12 effects and a playable on-screen keyboard.\n\n"
         L"Choose where to install the VST3 plugin:";
 

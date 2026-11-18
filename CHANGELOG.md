@@ -2,6 +2,21 @@
 
 ## 1.2.0
 
+### Demo songs
+- **30 new songs, 34 in all**, every one original:
+  - **Retro:** Crystal Caverns, Boss Rush, Starfield Run, Snowfall Village, Title Screen Dreams.
+  - **Medieval:** Lantern Estampie, Pilgrim's Road (chant over a drone), Saltarello of the Mill, Abbey Round, The Falconer's Ductia, Lament of the Tower, Rose of the Marches, Jongleur's Jig, King's Procession, Harvest Round. The two rounds are canons in three voices.
+  - **Ambient:** 15 slow, spacious piano pieces with soft seventh and ninth chords: First Light, Moss and Stone, Cartographer, Rain on the Lake, Little Hearth, Slow River, Pale Birch, Starlit Pasture, Clay and Cloud, Low Tide, Distant Village, Snowmelt, Long Afternoon, Saplings, Quiet Harbor.
+- **Song list:** the `▼` beside `DEMO` opens a list with `RETRO`, `MEDIEVAL` and `AMBIENT` groups. Click a song to play it on the loaded sound; `DEMO` then replays it. The playing song's name shows in the notes strip.
+
+### Drum kits
+- **Eight drum sets:** on the Drum Kit oscillator, the `HARM` row becomes `KIT` and picks Chip, 808 Boom, NES Noise, Electro, Dusty Break, Tavern, War Drums or Hand Drums. Each set has its own drum sounds, and the key labels and notes strip name them.
+- **New presets:** Boom 808 Kit, NES Noise Kit, Electro Box Kit, Dusty Break Kit, Tavern Percussion, War Drums and Hand Drum Circle, plus Felt Room Keys, a soft piano-like sound for the ambient songs. 80 presets in all, added after the old ones.
+- **Existing kits** sound exactly as before: they use the Chip set.
+
+### Projects
+- **1.1 projects** open with the same preset selected, even though the preset list grew.
+
 ### Interface
 - **New look:** every window, button, tab, slider and dialog is drawn from the *Dark Ages UI* pixel-art pack: gold knotwork frames, a gilded plaque for the sound name, scroll-end buttons, jewel slider handles and a gem-LED ring around the macro dial.
 - **New type:** headings use *Abaddon Bold*, secondary text *Abaddon Light*, lists and values *BoldPixels*, and the dial value *Fibberish*. Preset names now show in their own upper and lower case.

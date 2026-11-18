@@ -23,6 +23,14 @@ inline const char* harmonyName(int idx) {
     return kNames[std::clamp(idx, 0, kNumHarmonyModes - 1)];
 }
 
+// The Drum Kit oscillator reads the Harmony parameter as its kit.
+inline const char* drumKitName(int idx) {
+    static const char* kNames[kNumDrumKits] = {
+        "Chip", "808 Boom", "NES Noise", "Electro", "Dusty Break", "Tavern", "War Drums", "Hand Drums"
+    };
+    return kNames[std::clamp(idx, 0, kNumDrumKits - 1)];
+}
+
 inline const char* reverbTypeName(int idx) {
     static const char* kNames[kNumReverbTypes] = { "Room", "Hall", "Church", "Cave" };
     return kNames[std::clamp(idx, 0, kNumReverbTypes - 1)];

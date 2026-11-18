@@ -15,12 +15,13 @@
 
 ## Features
 
-- **72 factory presets in five eras**
-  - **80s chip:** pulse leads, NES-style triangle bass, noise percussion.
+- **80 factory presets in five eras**
+  - **80s chip:** pulse leads, NES-style triangle bass, noise percussion, and an NES noise-channel drum kit.
   - **90s chip:** handheld wavetable bass, 16-bit FM, "mode 7" strings.
-  - **Synth 80s:** neon leads, FM ballad keys, brass, glass pads, VHS tape pads, arps.
-  - **Medieval:** lute, gothic harp, harpsichord, recorder, cathedral and portative organs, hurdy-gurdy, viol consort, monk choir, shawm and bagpipe, bells.
-  - **SFX + kit:** coin pickup, jump, laser, power-up, critter cry, heal chime, menu blip, explosion, warp portal, klaxon, bubble pop, and three 12-piece drum kits (one drum per note).
+  - **Synth 80s:** neon leads, FM ballad keys, soft felt keys, brass, glass pads, VHS tape pads, arps, and an electro drum kit.
+  - **Medieval:** lute, gothic harp, harpsichord, recorder, cathedral and portative organs, hurdy-gurdy, viol consort, monk choir, shawm and bagpipe, bells, tavern percussion and war drums.
+  - **SFX + kit:** coin pickup, jump, laser, power-up, critter cry, heal chime, menu blip, explosion, warp portal, klaxon, bubble pop, and chip, stadium, handheld, 808, dusty break-beat and hand-drum kits.
+- **Ten drum kits, eight drum sets.** Every kit puts one drum on each note name (C kick, D snare, F# hat...). With the Drum Kit oscillator, the `HARM` row turns into `KIT` and picks one of eight sets: Chip, 808 Boom, NES Noise, Electro, Dusty Break, Tavern (frame drum, tabor, darbuka, tambourine, finger cymbals), War Drums (great drum, timpani, gong) and Hand Drums (congas, bongos, djembe, shakers).
 - **Your own sound library.** Save any edited sound under its own name, star favorites, and collect sounds into named banks. If you switch away from an edited sound, Pixel LABS asks whether to save it first.
 - **Touch response.** Four velocity curves (Off, Light, Normal, Heavy) and a sensitivity amount. They belong to your keyboard, so changing sounds keeps them.
 - **20 oscillator models.** Classic pulse, triangle, LFSR noise, PWM and wavetable are joined by 2-operator FM, a two-string plucked model (lute, harp), formant voices (choir, reed, bowed) and pitched drums.
@@ -29,7 +30,7 @@
 - **Playable 61-key keyboard.** Every key is labelled with its note name (C D E F G A B, C#…). Played keys light up, and the chord you're playing is named (e.g. `A MIN7`). You can play with the mouse or with your computer keyboard.
 - **Pixel-art interface.** Gold knotwork windows, scroll-end buttons, jewel slider handles and gem LEDs from the *Dark Ages UI* pack, with four pixel fonts.
 - **Seven skins plus AUTO:** GILDED (the default), NES, DMG, NEON, CODEX, ARCADE and PAPER. Each skin recolours the same art, and text colours adapt so every skin stays readable. AUTO picks the skin that matches the preset's era. Zoom goes from 100 to 200 %.
-- **Four built-in demo songs**, chosen by era. Three are original; the medieval one is the traditional *Greensleeves*.
+- **34 built-in demo songs** in three groups: 8 retro game tunes, 11 medieval dances, chants and rounds, and 15 slow ambient piano pieces. They play on the loaded sound; pick one from the song list next to `DEMO`. All are original except the traditional *Greensleeves*.
 - **Host integration:** 37 automatable parameters, host tempo sync, a program-change preset list, and built-in MIDI CC mapping for common controllers.
 
 | | | |
@@ -40,6 +41,11 @@
 | SFX + drum kit (ARCADE) | PAPER | Synth 80s (NEON) |
 | ![Save As dialog](docs/screenshot-save-as.png) | ![Unsaved changes prompt](docs/screenshot-unsaved.png) | ![Banks tab](docs/screenshot-banks.png) |
 | Save As | Unsaved changes | Banks |
+
+<p align="center">
+  <img src="docs/screenshot-song-picker.png" width="640" alt="The demo song list"><br>
+  <em>The demo song list</em>
+</p>
 
 ## Install
 
@@ -75,10 +81,10 @@ Exit codes: `0` success, `1` error, `2` cancelled.
 | + BANK | Adds the loaded sound to one or more banks. Make, rename and delete banks in the `BANKS` tab. A bank only points at sounds, so one sound can sit in several banks. |
 | Preset bar | `◀` / `▶` step through the presets in the current tab. Scroll the mouse wheel over the list. |
 | Macro dial | Pick an effect with the 12 buttons, then drag the dial up/down or use the mouse wheel. |
-| Sound panel | The arrows choose oscillator, harmony, reverb room and echo type. Drag or scroll a slider to change it; double-click resets it to the loaded sound's value. |
+| Sound panel | The arrows choose oscillator, harmony, reverb room and echo type. On the Drum Kit oscillator the harmony row reads `KIT` and picks the drum set. Drag or scroll a slider to change it; double-click resets it to the loaded sound's value. |
 | Keyboard | Click or drag across the keys; clicking lower on a key plays harder. With the plugin window focused, `A W S E D F T G Y H U J K O L P ;` play notes and `Z` / `X` shift the octave. |
 | TOUCH / VEL SENS | Pick the velocity curve and how much velocity changes level and tone. Normal at 65 % is the classic response; Off plays every note at full level. |
-| PLAY DEMO | Plays the built-in song for the current preset's era. |
+| DEMO / ▼ | `DEMO` plays or stops a demo song: the one you last picked, or else the song for the sound's era. `▼` opens the song list with its `RETRO`, `MEDIEVAL` and `AMBIENT` groups; click a song to play it on the loaded sound. The list suggests sounds that suit each group. |
 | SKIN / ZOOM | Change the colour skin and window size. Both are saved with your project. |
 
 ### Your sound library
@@ -136,12 +142,13 @@ A `CMakeLists.txt` is included for IDEs (plugin and test only; the installer is 
 ### Project layout
 
 ```text
-src/dsp/        RetroSynthEngine: voices, oscillators, effects, demo sequencer
+src/dsp/        RetroSynthEngine: voices, oscillators, drum kits, effects, demo sequencer
+                DemoSongs + DemoSongBook.inc: the demo songs and their accompaniment styles
 src/gui/        Win32 editor drawn into an offscreen pixel buffer: sprite 3/9-slice
                 drawing, skin recolouring and pixel-font text (UiKit.h)
 src/library/    Saved sounds, favorites and banks (the shared library file)
 src/plugin/     VST3 component/controller, parameter IDs and names, factory entry
-src/presets/    The 72 factory presets
+src/presets/    The 80 factory presets
 include/vst3/   Minimal VST3 ABI declarations (no Steinberg SDK needed)
 installer/      Self-contained setup.exe (plugin embedded as a resource)
 tests/          Headless VST3 host test

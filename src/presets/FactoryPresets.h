@@ -15,7 +15,7 @@ struct FactoryPreset {
 };
 
 // Slots are append-only: a project stores the slot index, so existing slots never move.
-static constexpr int kNumFactoryPresets = 72;
+static constexpr int kNumFactoryPresets = 80;
 
 static const char* const kEraNames[kNumEras] = {
     "80S CHIP", "90S CHIP", "SYNTH 80S", "MEDIEVAL", "SFX + KIT"
@@ -65,6 +65,7 @@ public:
     Builder& set(int id, float value)   { p_.values[id] = value; return *this; }
     Builder& wave(int w)                { return set(kParamWaveform, listToNorm(w, kNumWaveforms)); }
     Builder& harm(int h)                { return set(kParamHarmony, listToNorm(h, kNumHarmonyModes)); }
+    Builder& kit(int k)                 { return harm(k); } // the drum oscillator reads HARM as its kit
     Builder& dyn(float d)               { return set(kParamDynamics, d); }
     Builder& expr(float e)              { return set(kParamExpression, e); }
     Builder& env(float a, float d, float s, float r) {
@@ -426,6 +427,41 @@ struct PresetBank {
             .wave(kWaveNesTri).dyn(0.20f).env(0.0f, 0.22f, 0.0f, 0.08f).sweep(-9.0f, 0.06f)
             .filt(0.94f, 0.05f, 0.0f).sub(0.0f).vib(0.0f).detune(0.0f)
             .reverb(0.16f, kRevRoom).delay(0.12f, kDly16Bit).chorus(0.0f).macro(8));
+
+        // ================= 1.2 bank (slots 72..79): drum kits and soft keys =================
+
+        add(B("Boom 808 Kit", "DRUMS", kEraSfx, "Long sub kick, metallic hats and a ringing cymbal")
+            .wave(kWaveDrums).expr(0.78f).kit(kKit808).dyn(0.55f).env(0.0f, 0.40f, 1.0f, 0.20f)
+            .filt(1.0f, 0.0f, 0.0f).sub(0.0f).vib(0.0f).detune(0.0f)
+            .reverb(0.10f, kRevRoom).delay(0.0f, kDlyPing).chorus(0.0f).drive(0.12f).macro(6));
+        add(B("NES Noise Kit", "DRUMS", kEraChip80, "Triangle kicks and toms with the console noise channel")
+            .wave(kWaveDrums).kit(kKitNes).dyn(0.50f).env(0.0f, 0.40f, 1.0f, 0.20f)
+            .filt(1.0f, 0.0f, 0.0f).sub(0.0f).vib(0.0f).detune(0.0f)
+            .reverb(0.06f, kRevRoom).delay(0.0f, kDlyPing).chorus(0.0f).crush(0.12f).macro(7));
+        add(B("Electro Box Kit", "DRUMS", kEraSynth, "Clicky drum-machine kick, bright snare and metal hats")
+            .wave(kWaveDrums).expr(0.76f).kit(kKitElectro).dyn(0.55f).env(0.0f, 0.40f, 1.0f, 0.20f)
+            .filt(1.0f, 0.0f, 0.0f).sub(0.0f).vib(0.0f).detune(0.0f)
+            .reverb(0.18f, kRevRoom).delay(0.0f, kDlyPing).chorus(0.0f).drive(0.20f).width(0.62f).macro(6));
+        add(B("Dusty Break Kit", "DRUMS", kEraSfx, "Soft, dark break-beat drums with a shaker on B")
+            .wave(kWaveDrums).kit(kKitDusty).dyn(0.50f).env(0.0f, 0.40f, 1.0f, 0.20f)
+            .filt(0.82f, 0.05f, 0.0f).sub(0.0f).vib(0.0f).detune(0.0f)
+            .reverb(0.14f, kRevRoom).delay(0.0f, kDlyPing).chorus(0.0f).tape(0.35f).crush(0.10f).macro(5));
+        add(B("Tavern Percussion", "DRUMS", kEraMedieval, "Frame drum, tabor, darbuka, tambourine, finger cymbals")
+            .wave(kWaveDrums).expr(0.68f).kit(kKitTavern).dyn(0.50f).env(0.0f, 0.40f, 1.0f, 0.20f)
+            .filt(0.96f, 0.0f, 0.0f).sub(0.0f).vib(0.0f).detune(0.0f)
+            .reverb(0.30f, kRevRoom).delay(0.0f, kDlyPing).chorus(0.0f).width(0.62f).macro(0));
+        add(B("War Drums", "DRUMS", kEraMedieval, "Great drums, timpani and a gong for battle scenes")
+            .wave(kWaveDrums).expr(0.62f).kit(kKitWar).dyn(0.55f).env(0.0f, 0.40f, 1.0f, 0.20f)
+            .filt(1.0f, 0.0f, 0.0f).sub(0.0f).vib(0.0f).detune(0.0f)
+            .reverb(0.45f, kRevHall).delay(0.0f, kDlyPing).chorus(0.0f).width(0.70f).macro(0));
+        add(B("Hand Drum Circle", "DRUMS", kEraSfx, "Congas, bongos, djembe, shakers and claves")
+            .wave(kWaveDrums).expr(0.76f).kit(kKitHand).dyn(0.50f).env(0.0f, 0.40f, 1.0f, 0.20f)
+            .filt(1.0f, 0.0f, 0.0f).sub(0.0f).vib(0.0f).detune(0.0f)
+            .reverb(0.22f, kRevRoom).delay(0.0f, kDlyPing).chorus(0.0f).width(0.64f).macro(0));
+        add(B("Felt Room Keys", "KEYS", kEraSynth, "Soft, warm piano-like keys for the ambient demo songs")
+            .wave(kWaveFmKeys).dyn(0.30f).env(0.0f, 0.74f, 0.0f, 0.60f)
+            .filt(0.64f, 0.04f, 0.18f).sub(0.10f).vib(0.0f).detune(0.15f).width(0.64f)
+            .reverb(0.44f, kRevHall).delay(0.10f, kDlyTape).chorus(0.12f).tape(0.22f).macro(0));
     }
 };
 

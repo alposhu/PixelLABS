@@ -48,6 +48,7 @@ if errorlevel 1 goto failed
 echo [1/4] Plugin
 cl.exe %CXXFLAGS% /Fo"%BUILD%\obj\\" ^
     "%ROOT%src\dsp\RetroSynthEngine.cpp" ^
+    "%ROOT%src\dsp\DemoSongs.cpp" ^
     "%ROOT%src\gui\PixelLabsView.cpp" ^
     "%ROOT%src\library\SoundLibrary.cpp" ^
     "%ROOT%src\plugin\PixelLabsPlugin.cpp" ^
@@ -57,7 +58,7 @@ cl.exe %CXXFLAGS% /Fo"%BUILD%\obj\\" ^
 if errorlevel 1 goto failed
 
 echo [2/4] Test host
-cl.exe %CXXFLAGS% /Fo"%BUILD%\obj\\" "%ROOT%tests\test_vst3_host.cpp" /Fe"%BUILD%\test_vst3_host.exe" /link user32.lib gdi32.lib
+cl.exe %CXXFLAGS% /Fo"%BUILD%\obj\\" "%ROOT%tests\test_vst3_host.cpp" "%ROOT%src\dsp\DemoSongs.cpp" /Fe"%BUILD%\test_vst3_host.exe" /link user32.lib gdi32.lib
 if errorlevel 1 goto failed
 
 echo [3/4] Installer

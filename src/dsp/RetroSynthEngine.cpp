@@ -139,52 +139,149 @@ const float kWaveGain[kNumWaveforms] = {
     1.35f, 1.50f, 2.60f, 1.50f    // lute, bowed, choir, drums
 };
 
-struct DrumSpec { float tauA, tauB, tauP, baseHz, rangeHz; };
-const DrumSpec kDrums[12] = {
-    { 0.160f, 0.004f, 0.035f,   48.0f, 170.0f }, // C  kick
-    { 0.014f, 0.004f, 0.010f, 1700.0f,   0.0f }, // C# rim
-    { 0.070f, 0.110f, 0.020f,  185.0f,  90.0f }, // D  snare
-    { 0.100f, 0.100f, 0.010f,  300.0f,   0.0f }, // D# clap
-    { 0.050f, 0.060f, 0.015f,  240.0f,  60.0f }, // E  tight snare
-    { 0.220f, 0.004f, 0.050f,   85.0f,  75.0f }, // F  low tom
-    { 0.010f, 0.028f, 0.010f,  300.0f,   0.0f }, // F# closed hat
-    { 0.200f, 0.004f, 0.050f,  125.0f, 110.0f }, // G  mid tom
-    { 0.010f, 0.200f, 0.010f,  300.0f,   0.0f }, // G# open hat
-    { 0.180f, 0.004f, 0.045f,  175.0f, 150.0f }, // A  high tom
-    { 0.010f, 0.550f, 0.010f,  300.0f,   0.0f }, // A# crash
-    { 0.090f, 0.004f, 0.010f,  540.0f,   0.0f }  // B  cowbell
+// Drum synthesis models. Every kit maps one drum to each note name (C kick, D snare...).
+enum DrumModel {
+    kDmKick = 0,  // sine with a pitch drop, plus a noise click
+    kDmRim,       // short triangle tick
+    kDmSnare,     // sine body plus noise
+    kDmClap,      // three noise bursts and a tail
+    kDmTom,       // pitched sine (with optional noise)
+    kDmHat,       // bright hiss
+    kDmCowbell,   // two detuned squares
+    kDmMetal,     // six inharmonic squares, highpassed (808 hats, cymbals, jingles)
+    kDmNes,       // 4-bit triangle body plus an LFSR noise channel (aux = noise clock, colour >= 0.5 = metallic mode)
+    kDmBell,      // inharmonic partials (finger cymbals, bells)
+    kDmShaker     // hiss that swells in over tauA and dies over tauB
 };
 
-int songForEra(int era) {
-    switch (era) {
-        case kEraChip90:   return 3;
-        case kEraSynth:    return 2;
-        case kEraMedieval: return 1;
-        default:           return 0;
-    }
-}
+struct DrumSpec {
+    int model;
+    float tauA, tauB, tauP;  // decay of the tone, the noise and the pitch drop (s)
+    float baseHz, rangeHz;   // pitch at rest, extra pitch at the hit
+    float gainT, gainN;      // tone and noise levels
+    float color;             // noise colour: 0 white, >0 brighter, <0 darker
+    float aux;               // model specific
+};
 
-using NoteList = std::initializer_list<std::pair<int, int>>;
-
-void putNotes(std::vector<int8_t>& track, NoteList notes) {
-    for (const auto& n : notes) {
-        for (int i = 0; i < n.second; ++i) {
-            if (n.first < 0) track.push_back(-1);
-            else track.push_back(static_cast<int8_t>(i == 0 ? n.first : -2));
-        }
+const DrumSpec kDrumKits[kNumDrumKits][12] = {
+    { // CHIP: the original kit
+        { kDmKick,    0.160f, 0.004f, 0.035f,   48.0f, 170.0f, 1.25f, 0.50f, 0.0f, 0.0f }, // C  kick
+        { kDmRim,     0.014f, 0.004f, 0.010f, 1700.0f,   0.0f, 0.90f, 0.00f, 0.0f, 0.0f }, // C# rim
+        { kDmSnare,   0.070f, 0.110f, 0.020f,  185.0f,  90.0f, 0.60f, 0.80f, 0.0f, 0.0f }, // D  snare
+        { kDmClap,    0.100f, 0.100f, 0.010f,  300.0f,   0.0f, 0.90f, 1.10f, 0.0f, 0.0f }, // D# clap
+        { kDmSnare,   0.050f, 0.060f, 0.015f,  240.0f,  60.0f, 0.60f, 0.80f, 0.0f, 0.0f }, // E  tight snare
+        { kDmTom,     0.220f, 0.004f, 0.050f,   85.0f,  75.0f, 1.10f, 0.00f, 0.0f, 0.0f }, // F  low tom
+        { kDmHat,     0.010f, 0.028f, 0.010f,  300.0f,   0.0f, 0.00f, 1.10f, 0.0f, 0.0f }, // F# closed hat
+        { kDmTom,     0.200f, 0.004f, 0.050f,  125.0f, 110.0f, 1.10f, 0.00f, 0.0f, 0.0f }, // G  mid tom
+        { kDmHat,     0.010f, 0.200f, 0.010f,  300.0f,   0.0f, 0.00f, 1.10f, 0.0f, 0.0f }, // G# open hat
+        { kDmTom,     0.180f, 0.004f, 0.045f,  175.0f, 150.0f, 1.10f, 0.00f, 0.0f, 0.0f }, // A  high tom
+        { kDmHat,     0.010f, 0.550f, 0.010f,  300.0f,   0.0f, 0.00f, 1.10f, 0.0f, 0.0f }, // A# crash
+        { kDmCowbell, 0.090f, 0.004f, 0.010f,  540.0f,   0.0f, 0.80f, 0.00f, 0.0f, 0.0f }  // B  cowbell
+    },
+    { // 808 BOOM: long sub kick, metallic hats and cymbal
+        { kDmKick,    0.550f, 0.003f, 0.060f,   46.0f,  75.0f, 1.35f, 0.15f, 0.0f, 0.0f },
+        { kDmRim,     0.012f, 0.004f, 0.008f, 1650.0f,   0.0f, 0.90f, 0.00f, 0.0f, 0.0f },
+        { kDmSnare,   0.100f, 0.130f, 0.015f,  180.0f,  40.0f, 0.55f, 0.85f, 0.6f, 0.0f },
+        { kDmClap,    0.160f, 0.100f, 0.010f,  300.0f,   0.0f, 0.90f, 1.10f, 0.0f, 0.0f },
+        { kDmSnare,   0.050f, 0.070f, 0.012f,  240.0f,  40.0f, 0.50f, 0.80f, 0.8f, 0.0f },
+        { kDmTom,     0.420f, 0.004f, 0.080f,   75.0f,  25.0f, 1.10f, 0.00f, 0.0f, 0.0f },
+        { kDmMetal,   0.010f, 0.045f, 0.010f,  205.0f,   0.0f, 1.90f, 0.40f, 0.0f, 0.0f },
+        { kDmTom,     0.360f, 0.004f, 0.080f,  105.0f,  30.0f, 1.10f, 0.00f, 0.0f, 0.0f },
+        { kDmMetal,   0.010f, 0.320f, 0.010f,  205.0f,   0.0f, 1.90f, 0.40f, 0.0f, 0.0f },
+        { kDmTom,     0.300f, 0.004f, 0.070f,  150.0f,  40.0f, 1.10f, 0.00f, 0.0f, 0.0f },
+        { kDmMetal,   0.010f, 1.100f, 0.010f,  260.0f,   0.0f, 1.30f, 0.70f, 0.0f, 0.0f },
+        { kDmCowbell, 0.120f, 0.004f, 0.010f,  540.0f,   0.0f, 0.80f, 0.00f, 0.0f, 0.0f }
+    },
+    { // NES NOISE: triangle drums and the console's noise channel
+        { kDmNes,     0.120f, 0.004f, 0.025f,   55.0f, 300.0f, 1.50f, 0.00f, 0.0f,  8000.0f },
+        { kDmNes,     0.004f, 0.012f, 0.010f,    0.0f,   0.0f, 0.00f, 0.80f, 1.0f, 12000.0f },
+        { kDmNes,     0.050f, 0.100f, 0.020f,  180.0f, 120.0f, 0.60f, 0.70f, 0.0f,  6000.0f },
+        { kDmNes,     0.004f, 0.080f, 0.010f,    0.0f,   0.0f, 0.00f, 0.80f, 1.0f,  9000.0f },
+        { kDmNes,     0.030f, 0.060f, 0.015f,  220.0f, 100.0f, 0.40f, 0.80f, 0.0f, 14000.0f },
+        { kDmNes,     0.200f, 0.004f, 0.080f,   90.0f,  60.0f, 1.15f, 0.00f, 0.0f,  8000.0f },
+        { kDmNes,     0.004f, 0.025f, 0.010f,    0.0f,   0.0f, 0.00f, 0.90f, 0.0f, 40000.0f },
+        { kDmNes,     0.180f, 0.004f, 0.070f,  130.0f,  80.0f, 1.15f, 0.00f, 0.0f,  8000.0f },
+        { kDmNes,     0.004f, 0.180f, 0.010f,    0.0f,   0.0f, 0.00f, 0.90f, 0.0f, 40000.0f },
+        { kDmNes,     0.160f, 0.004f, 0.060f,  180.0f, 110.0f, 1.15f, 0.00f, 0.0f,  8000.0f },
+        { kDmNes,     0.004f, 0.600f, 0.010f,    0.0f,   0.0f, 0.00f, 0.70f, 0.0f, 25000.0f },
+        { kDmCowbell, 0.070f, 0.004f, 0.010f,  880.0f,   0.0f, 0.80f, 0.00f, 0.0f,     0.0f }
+    },
+    { // ELECTRO: punchy clicky kick, bright snare, metallic hats
+        { kDmKick,    0.300f, 0.008f, 0.030f,   52.0f, 220.0f, 1.10f, 0.70f, 1.0f, 0.0f },
+        { kDmRim,     0.010f, 0.004f, 0.008f, 1900.0f,   0.0f, 0.90f, 0.00f, 0.0f, 0.0f },
+        { kDmSnare,   0.080f, 0.160f, 0.015f,  200.0f,  60.0f, 0.55f, 0.95f, 0.7f, 0.0f },
+        { kDmClap,    0.120f, 0.100f, 0.010f,  300.0f,   0.0f, 0.90f, 1.10f, 0.0f, 0.0f },
+        { kDmSnare,   0.040f, 0.090f, 0.010f,  260.0f,  50.0f, 0.45f, 0.90f, 1.0f, 0.0f },
+        { kDmTom,     0.250f, 0.004f, 0.040f,   95.0f,  90.0f, 1.10f, 0.00f, 0.0f, 0.0f },
+        { kDmMetal,   0.010f, 0.035f, 0.010f,  300.0f,   0.0f, 1.80f, 0.50f, 0.0f, 0.0f },
+        { kDmTom,     0.220f, 0.004f, 0.040f,  135.0f, 110.0f, 1.10f, 0.00f, 0.0f, 0.0f },
+        { kDmMetal,   0.010f, 0.260f, 0.010f,  300.0f,   0.0f, 1.80f, 0.50f, 0.0f, 0.0f },
+        { kDmTom,     0.200f, 0.004f, 0.035f,  185.0f, 140.0f, 1.10f, 0.00f, 0.0f, 0.0f },
+        { kDmHat,     0.010f, 0.900f, 0.010f,  300.0f,   0.0f, 0.00f, 1.00f, 0.0f, 0.0f },
+        { kDmCowbell, 0.080f, 0.004f, 0.010f,  600.0f,   0.0f, 0.80f, 0.00f, 0.0f, 0.0f }
+    },
+    { // DUSTY BREAK: soft, dark sampled-break feel
+        { kDmKick,    0.220f, 0.012f, 0.040f,   50.0f, 120.0f, 1.30f, 0.30f, -0.6f, 0.0f },
+        { kDmTom,     0.020f, 0.004f, 0.004f,  900.0f, 200.0f, 0.80f, 0.00f,  0.0f, 0.0f },
+        { kDmSnare,   0.090f, 0.150f, 0.015f,  190.0f,  30.0f, 0.70f, 0.70f, -0.2f, 0.0f },
+        { kDmClap,    0.100f, 0.100f, 0.010f,  300.0f,   0.0f, 1.40f, 1.80f,  0.0f, 0.0f },
+        { kDmSnare,   0.040f, 0.060f, 0.010f,  220.0f,  30.0f, 0.60f, 0.80f,  0.0f, 0.0f },
+        { kDmTom,     0.250f, 0.004f, 0.050f,   80.0f,  40.0f, 1.10f, 0.00f,  0.0f, 0.0f },
+        { kDmHat,     0.010f, 0.030f, 0.010f,  300.0f,   0.0f, 0.00f, 1.40f,  0.0f, 0.0f },
+        { kDmTom,     0.220f, 0.004f, 0.050f,  115.0f,  50.0f, 1.10f, 0.00f,  0.0f, 0.0f },
+        { kDmHat,     0.010f, 0.150f, 0.010f,  300.0f,   0.0f, 0.00f, 1.40f,  0.0f, 0.0f },
+        { kDmTom,     0.200f, 0.004f, 0.045f,  160.0f,  60.0f, 1.10f, 0.00f,  0.0f, 0.0f },
+        { kDmMetal,   0.010f, 0.800f, 0.010f,  330.0f,   0.0f, 1.60f, 0.80f,  0.0f, 0.0f },
+        { kDmShaker,  0.020f, 0.090f, 0.010f,    0.0f,   0.0f, 0.00f, 2.20f,  0.0f, 0.0f }
+    },
+    { // TAVERN: frame drum, tabor, darbuka, tambourine, finger cymbals, hand bell
+        { kDmSnare,   0.300f, 0.080f, 0.050f,   70.0f,  30.0f, 1.20f, 0.35f, -0.7f, 0.0f }, // frame drum
+        { kDmTom,     0.035f, 0.004f, 0.004f, 1250.0f, 200.0f, 0.55f, 0.00f,  0.0f, 0.0f }, // wood block
+        { kDmSnare,   0.100f, 0.200f, 0.015f,  165.0f,  40.0f, 0.75f, 0.55f,  0.2f, 0.0f }, // tabor
+        { kDmClap,    0.100f, 0.100f, 0.010f,  300.0f,   0.0f, 0.90f, 1.10f,  0.0f, 0.0f }, // hand clap
+        { kDmSnare,   0.040f, 0.020f, 0.006f,  620.0f, 300.0f, 0.90f, 0.40f,  1.0f, 0.0f }, // darbuka tek
+        { kDmKick,    0.280f, 0.010f, 0.030f,   95.0f,  40.0f, 0.95f, 0.20f, -0.6f, 0.0f }, // darbuka doum
+        { kDmMetal,   0.010f, 0.070f, 0.010f, 2900.0f,   0.0f, 0.80f, 0.70f,  0.0f, 0.0f }, // tambourine shake
+        { kDmTom,     0.200f, 0.004f, 0.040f,  140.0f,  50.0f, 1.10f, 0.00f,  0.0f, 0.0f }, // low tabor
+        { kDmMetal,   0.010f, 0.300f, 0.010f, 2900.0f,   0.0f, 0.80f, 0.70f,  0.0f, 0.0f }, // tambourine hit
+        { kDmTom,     0.140f, 0.004f, 0.030f,  210.0f,  80.0f, 1.10f, 0.00f,  0.0f, 0.0f }, // nakers
+        { kDmBell,    1.600f, 0.500f, 0.010f, 1420.0f,   0.0f, 0.45f, 0.00f,  0.0f, 0.0f }, // finger cymbals
+        { kDmBell,    1.400f, 0.400f, 0.010f,  880.0f,   0.0f, 0.38f, 0.00f,  0.0f, 0.0f }  // hand bell
+    },
+    { // WAR DRUMS: huge low drums, timpani, gong
+        { kDmSnare,   0.900f, 0.120f, 0.120f,   42.0f,  40.0f, 0.55f, 0.30f, -0.8f, 0.0f }, // great drum
+        { kDmTom,     0.030f, 0.004f, 0.004f, 1500.0f, 200.0f, 0.90f, 0.00f,  0.0f, 0.0f }, // rim click
+        { kDmSnare,   0.120f, 0.250f, 0.015f,  210.0f,  50.0f, 0.60f, 0.70f,  0.3f, 0.0f }, // field snare
+        { kDmClap,    0.200f, 0.100f, 0.010f,  300.0f,   0.0f, 0.90f, 1.10f,  0.0f, 0.0f }, // massed clap
+        { kDmSnare,   0.350f, 0.050f, 0.040f,  120.0f,  40.0f, 0.85f, 0.30f, -0.5f, 0.0f }, // high war drum
+        { kDmTom,     1.200f, 0.004f, 0.200f,   65.0f,   8.0f, 1.10f, 0.00f,  0.0f, 0.0f }, // low timpani
+        { kDmMetal,   0.010f, 0.120f, 0.010f, 1800.0f,   0.0f, 0.80f, 0.60f,  0.0f, 0.0f }, // chains
+        { kDmTom,     1.000f, 0.004f, 0.200f,   87.0f,   8.0f, 1.10f, 0.00f,  0.0f, 0.0f }, // mid timpani
+        { kDmMetal,   0.010f, 1.800f, 0.010f,  120.0f,   0.0f, 1.00f, 0.50f,  0.0f, 0.0f }, // gong
+        { kDmTom,     0.900f, 0.004f, 0.200f,  110.0f,   8.0f, 0.80f, 0.00f,  0.0f, 0.0f }, // high timpani
+        { kDmHat,     0.010f, 1.400f, 0.010f,  300.0f,   0.0f, 0.00f, 0.90f,  0.0f, 0.0f }, // crash
+        { kDmBell,    0.600f, 0.200f, 0.010f, 1100.0f,   0.0f, 0.55f, 0.00f,  0.0f, 0.0f }  // anvil
+    },
+    { // HAND DRUMS: congas, bongos, djembe, shakers, claves
+        { kDmTom,     0.320f, 0.004f, 0.015f,  170.0f,  40.0f, 1.10f, 0.00f,  0.0f, 0.0f }, // low conga
+        { kDmTom,     0.040f, 0.004f, 0.002f, 2500.0f,   0.0f, 0.90f, 0.00f,  0.0f, 0.0f }, // claves
+        { kDmSnare,   0.060f, 0.035f, 0.008f,  340.0f,  60.0f, 0.80f, 0.60f,  0.8f, 0.0f }, // conga slap
+        { kDmSnare,   0.010f, 0.025f, 0.004f, 1800.0f,   0.0f, 0.30f, 1.00f,  1.0f, 0.0f }, // finger snap
+        { kDmTom,     0.250f, 0.004f, 0.012f,  250.0f,  40.0f, 1.10f, 0.00f,  0.0f, 0.0f }, // open conga
+        { kDmKick,    0.300f, 0.010f, 0.030f,   75.0f,  60.0f, 1.00f, 0.30f, -0.6f, 0.0f }, // djembe bass
+        { kDmShaker,  0.025f, 0.080f, 0.010f,    0.0f,   0.0f, 0.00f, 1.30f,  0.0f, 0.0f }, // shaker
+        { kDmTom,     0.120f, 0.004f, 0.008f,  390.0f,  80.0f, 1.00f, 0.00f,  0.0f, 0.0f }, // low bongo
+        { kDmShaker,  0.040f, 0.220f, 0.010f,    0.0f,   0.0f, 0.00f, 1.30f,  0.0f, 0.0f }, // long shake
+        { kDmTom,     0.100f, 0.004f, 0.008f,  520.0f, 100.0f, 0.85f, 0.00f,  0.0f, 0.0f }, // high bongo
+        { kDmMetal,   0.010f, 0.180f, 0.010f, 3500.0f,   0.0f, 0.60f, 0.80f,  0.0f, 0.0f }, // cabasa
+        { kDmBell,    0.350f, 0.120f, 0.010f,  960.0f,   0.0f, 0.50f, 0.00f,  0.0f, 0.0f }  // agogo
     }
-}
+};
+
 
 } // namespace
 
-const char* RetroSynthEngine::demoSongName(int index) {
-    static const char* kNames[kNumDemoSongs] = {
-        "PIXEL SUNRISE", "GREENSLEEVES", "NEON DRIVE", "POCKET ADVENTURE"
-    };
-    return kNames[std::clamp(index, 0, kNumDemoSongs - 1)];
-}
-
-RetroSynthEngine::RetroSynthEngine() {
+RetroSynthEngine::RetroSynthEngine() : songs_(demoSongs()) {
     for (int i = 0; i < kNumParams; ++i) { params_[i] = 0.5f; sm_[i] = 0.5f; }
     // Preset loads skip the live controls, so give them real defaults here
     // (a 0.5 sustain value would read as a held pedal).
@@ -192,166 +289,9 @@ RetroSynthEngine::RetroSynthEngine() {
     params_[kParamSustain] = 0.0f;
     params_[kParamVelSens] = kDefaultVelSens;
     params_[kParamTouch] = listToNorm(kTouchNormal, kNumTouchCurves);
-    buildDemoSongs();
     applyPreset(0);
     for (int i = 0; i < kNumParams; ++i) sm_[i] = params_[i];
     prepare(48000.0, 512);
-}
-
-void RetroSynthEngine::buildDemoSongs() {
-    // 0: "Pixel Sunrise" (original), 128 BPM 80s console theme in D minor: Dm Bb C A
-    {
-        DemoSong& s = songs_[0];
-        s.name = demoSongName(0);
-        s.stepSec = 60.0 / 128.0 / 4.0;
-        s.numSteps = 256; // 16 bars of 16th notes
-        static const int kBassRoot[4] = { 50, 46, 48, 45 };          // D3 Bb2 C3 A2
-        static const int kArp[4][4] = { {62,65,69,74}, {58,62,65,70}, {60,64,67,72}, {57,61,64,69} };
-        static const int kArpOrder[8] = { 0, 1, 2, 3, 1, 2, 3, 2 };
-        static const int kPad[4] = { 65, 62, 64, 61 };                // chord thirds
-        auto& lead = s.tracks[0];
-        auto& bass = s.tracks[1];
-        auto& arp = s.tracks[2];
-        auto& pad = s.tracks[3];
-        auto& thump = s.tracks[4];
-        for (int bar = 0; bar < 16; ++bar) {
-            const int ch = bar % 4;
-            for (int i = 0; i < 16; ++i) {
-                // Octave-bouncing eighth-note bass
-                if (i & 1) bass.push_back(-2);
-                else bass.push_back(static_cast<int8_t>(kBassRoot[ch] + (((i >> 1) & 1) ? 12 : 0)));
-                arp.push_back(static_cast<int8_t>(kArp[ch][kArpOrder[i & 7]]));
-                thump.push_back((i == 0 || i == 8) ? 38 : -1);
-            }
-            putNotes(pad, { {kPad[ch], 16} });
-        }
-        putNotes(lead, { {-1,64} }); // 4-bar intro
-        // Phrase A
-        const NoteList a1 = { {74,4},{76,2},{77,4},{76,2},{74,2},{72,2} };
-        const NoteList a2 = { {70,6},{74,2},{77,6},{79,2} };
-        const NoteList a3 = { {79,4},{77,2},{76,4},{72,2},{76,4} };
-        putNotes(lead, a1); putNotes(lead, a2); putNotes(lead, a3);
-        putNotes(lead, { {73,6},{76,2},{81,8} });
-        // Phrase B
-        putNotes(lead, { {81,4},{79,2},{77,4},{76,2},{77,2},{79,2} });
-        putNotes(lead, { {77,6},{74,2},{70,4},{74,4} });
-        putNotes(lead, { {76,2},{77,2},{79,4},{84,4},{79,4} });
-        putNotes(lead, { {81,12},{-1,4} });
-        // Phrase A again, resolving home to D
-        putNotes(lead, a1); putNotes(lead, a2); putNotes(lead, a3);
-        putNotes(lead, { {73,4},{69,4},{74,8} });
-        lead.resize(s.numSteps, -1);
-        s.velocity[0] = 0.90f; s.velocity[1] = 0.74f; s.velocity[2] = 0.30f;
-        s.velocity[3] = 0.26f; s.velocity[4] = 0.50f;
-    }
-
-    // 1: "Greensleeves" (traditional, 16th century), 6/8 in 16th steps
-    {
-        DemoSong& s = songs_[1];
-        s.name = demoSongName(1);
-        s.stepSec = 0.140;
-        auto& lead = s.tracks[0];
-        const NoteList m1 = { {72,4},{74,2},{76,3},{77,1},{76,2} };
-        const NoteList m2 = { {74,4},{71,2},{67,3},{69,1},{71,2} };
-        const NoteList m3 = { {72,4},{69,2},{69,3},{68,1},{69,2} };
-        const NoteList m7 = { {72,3},{71,1},{69,2},{68,3},{66,1},{68,2} };
-        const NoteList m9 = { {79,6},{79,3},{78,1},{76,2} };
-        putNotes(lead, m1); putNotes(lead, m2); putNotes(lead, m3);
-        putNotes(lead, { {71,4},{68,2},{64,4},{69,2} });
-        putNotes(lead, m1); putNotes(lead, m2); putNotes(lead, m7);
-        putNotes(lead, { {69,6},{69,4},{-1,2} });
-        putNotes(lead, m9); putNotes(lead, m2); putNotes(lead, m3);
-        putNotes(lead, { {71,4},{68,2},{64,6} });
-        putNotes(lead, m9); putNotes(lead, m2); putNotes(lead, m7);
-        putNotes(lead, { {69,6},{69,6} });
-        s.numSteps = static_cast<int>(lead.size());
-
-        // Lute-style accompaniment: root, fifth, octave on each half bar
-        enum { Am, G, C, E };
-        static const int kRoots[4][3] = { {45,52,57}, {43,50,55}, {48,55,60}, {40,47,52} };
-        static const int kHalfBars[32] = {
-            Am,Am, G,G, Am,Am, E,E,  Am,Am, G,G, Am,E, Am,Am,
-            C,C,   G,G, Am,Am, E,E,  C,C,   G,G, Am,E, Am,Am
-        };
-        auto& bass = s.tracks[1];
-        for (int h = 0; h < 32; ++h) {
-            const int* r = kRoots[kHalfBars[h]];
-            putNotes(bass, { {r[0],2},{r[1],2},{r[2],2} });
-        }
-        bass.resize(s.numSteps, -1);
-        for (int t = 2; t < kDemoTracks; ++t) s.tracks[t].assign(s.numSteps, -1);
-        s.velocity[0] = 0.90f; s.velocity[1] = 0.55f;
-    }
-
-    // 2: "Neon Drive" (original), 110 BPM synth groove over Am F C G
-    {
-        DemoSong& s = songs_[2];
-        s.name = demoSongName(2);
-        s.stepSec = 60.0 / 110.0 / 4.0;
-        s.numSteps = 256;
-        static const int kBassRoot[4] = { 45, 41, 48, 43 };
-        static const int kArp[4][4] = { {57,60,64,69}, {57,60,65,69}, {55,60,64,67}, {55,59,62,67} };
-        static const int kArpOrder[8] = { 0, 1, 2, 3, 2, 1, 2, 3 };
-        auto& lead = s.tracks[0];
-        auto& bass = s.tracks[1];
-        auto& arp = s.tracks[2];
-        for (int bar = 0; bar < 16; ++bar) {
-            const int ch = bar % 4;
-            for (int i = 0; i < 16; ++i) {
-                if (i & 1) bass.push_back(-2);
-                else bass.push_back(static_cast<int8_t>(kBassRoot[ch] + ((i == 4 || i == 12) ? 12 : 0)));
-                arp.push_back(static_cast<int8_t>(kArp[ch][kArpOrder[i & 7]]));
-            }
-        }
-        putNotes(lead, { {-1,64} });
-        const NoteList a1 = { {76,6},{74,2},{72,8} };
-        const NoteList a2 = { {69,6},{72,2},{77,8} };
-        const NoteList a3 = { {76,4},{79,4},{76,4},{74,4} };
-        const NoteList a4 = { {74,8},{71,4},{74,4} };
-        putNotes(lead, a1); putNotes(lead, a2); putNotes(lead, a3); putNotes(lead, a4);
-        putNotes(lead, { {81,6},{79,2},{76,8} });
-        putNotes(lead, { {77,6},{76,2},{72,8} });
-        putNotes(lead, { {79,4},{76,4},{72,4},{76,4} });
-        putNotes(lead, { {74,12},{-1,4} });
-        putNotes(lead, a1); putNotes(lead, a2); putNotes(lead, a3); putNotes(lead, a4);
-        lead.resize(s.numSteps, -1);
-        s.tracks[3].assign(s.numSteps, -1);
-        s.tracks[4].assign(s.numSteps, -1);
-        s.velocity[0] = 0.92f; s.velocity[1] = 0.78f; s.velocity[2] = 0.36f;
-    }
-
-    // 3: "Pocket Adventure" (original), 140 BPM handheld-style overworld tune in C
-    {
-        DemoSong& s = songs_[3];
-        s.name = demoSongName(3);
-        s.stepSec = 60.0 / 140.0 / 4.0;
-        auto& lead = s.tracks[0];
-        auto& bass = s.tracks[1];
-        // chord per beat: 0 C, 1 G, 2 Am, 3 F
-        static const int kRoot[4] = { 48, 43, 45, 41 };
-        static const int kBeats[32] = {
-            0,0,0,0, 1,1,1,1, 2,2,2,2, 3,3,1,1,
-            0,0,0,0, 1,1,1,1, 3,3,3,3, 1,1,0,0
-        };
-        for (int rep = 0; rep < 2; ++rep) {
-            putNotes(lead, { {76,2},{79,2},{84,4},{83,2},{79,2},{76,4} });
-            putNotes(lead, { {74,2},{79,2},{83,4},{81,2},{79,2},{74,4} });
-            putNotes(lead, { {72,2},{76,2},{81,4},{79,2},{76,2},{72,4} });
-            putNotes(lead, { {77,4},{81,4},{79,4},{83,4} });
-            putNotes(lead, { {84,6},{79,2},{76,4},{79,4} });
-            putNotes(lead, { {83,6},{79,2},{74,4},{79,4} });
-            putNotes(lead, { {81,2},{79,2},{77,2},{76,2},{77,4},{81,4} });
-            putNotes(lead, { {79,4},{83,4},{84,8} });
-            for (int b = 0; b < 32; ++b) {
-                const int r = kRoot[kBeats[b]];
-                putNotes(bass, { {r,2},{r + 7,2} });
-            }
-        }
-        s.numSteps = static_cast<int>(lead.size());
-        bass.resize(s.numSteps, -1);
-        for (int t = 2; t < kDemoTracks; ++t) s.tracks[t].assign(s.numSteps, -1);
-        s.velocity[0] = 0.92f; s.velocity[1] = 0.70f;
-    }
 }
 
 void RetroSynthEngine::prepare(double sampleRate, int /*maxBlockSize*/) {
@@ -474,7 +414,9 @@ void RetroSynthEngine::setHostTempo(double bpm) {
 
 void RetroSynthEngine::setupDrum(Voice& v) {
     v.drumType = ((v.midiNote % 12) + 12) % 12;
-    const DrumSpec& d = kDrums[v.drumType];
+    // The drum oscillator has no harmony, so HARM picks its kit
+    const int kit = normToList(params_[kParamHarmony], kNumDrumKits);
+    const DrumSpec& d = kDrumKits[kit][v.drumType];
     const double decayScale = std::clamp(static_cast<double>(contourScale_), 0.25, 4.0);
     auto coef = [&](float tau, double scale) {
         return static_cast<float>(std::exp(-1.0 / (tau * scale * sampleRate_)));
@@ -487,6 +429,15 @@ void RetroSynthEngine::setupDrum(Voice& v) {
     v.dCoefP = coef(d.tauP, 1.0);
     v.dBaseHz = d.baseHz;
     v.dRangeHz = d.rangeHz;
+    v.drumModel = d.model;
+    v.dGainT = d.gainT;
+    v.dGainN = d.gainN;
+    v.dColor = d.color;
+    v.dAux = d.aux;
+    v.dHp = 0.0f;
+    for (double& ph : v.dPh) ph = 0.0;
+    v.dClock = 0.0;
+    v.dLfsr = 1u;
     v.phase1 = 0.0;
     v.phase2 = 0.0;
     v.lpA = 0.0f;
@@ -1016,9 +967,15 @@ void RetroSynthEngine::renderBlock(float* outL, float* outR, int numSamples, Sha
         }
 
         const bool reqDemo = (telemetry->demoActive.load(std::memory_order_relaxed) != 0);
-        if (reqDemo && !demoActive_) {
+        // A song picked in the editor restarts playback with that song
+        const uint32_t restart = telemetry->demoRestart.load(std::memory_order_acquire);
+        const bool restartReq = (restart != demoRestartSeen_);
+        demoRestartSeen_ = restart;
+        if (reqDemo && (!demoActive_ || restartReq)) {
+            if (demoActive_) releaseDemoNotes();
             demoActive_ = true;
-            demoSongIdx_ = songForEra(currentEra_);
+            const int choice = telemetry->demoChoice.load(std::memory_order_relaxed);
+            demoSongIdx_ = (choice >= 0 && choice < kNumDemoSongs) ? choice : demoSongForEra(currentEra_);
             demoStep_ = 0;
             demoSampleCounter_ = 0.0;
             for (int& p : demoPrev_) p = -1;
@@ -1095,23 +1052,66 @@ void RetroSynthEngine::renderBlock(float* outL, float* outR, int numSamples, Sha
                 const float n = whiteNoise(v.rng);
                 v.lpA += 0.30f * (n - v.lpA);
                 const float hiss = n - v.lpA;
+                // Noise colour: 0 white, >0 toward the bright hiss, <0 toward the dark lowpassed noise
+                const float ns = (v.dColor == 0.0f) ? n
+                               : (v.dColor > 0.0f ? n + v.dColor * (hiss - n) : n - v.dColor * (v.lpA - n));
                 float d = 0.0f;
-                switch (v.drumType) {
-                    case 0:  d = fsin(v.phase1) * v.dAmpA * 1.25f + n * v.dAmpB * 0.5f; break;
-                    case 1:  d = static_cast<float>(4.0 * std::fabs(v.phase1 - 0.5) - 1.0) * v.dAmpA * 0.9f; break;
-                    case 2:
-                    case 4:  d = fsin(v.phase1) * v.dAmpA * 0.6f + n * v.dAmpB * 0.8f; break;
-                    case 3: {
+                switch (v.drumModel) {
+                    case kDmKick:
+                    case kDmSnare:
+                    case kDmTom:
+                        d = fsin(v.phase1) * v.dAmpA * v.dGainT + ns * v.dAmpB * v.dGainN;
+                        break;
+                    case kDmRim:
+                        d = static_cast<float>(4.0 * std::fabs(v.phase1 - 0.5) - 1.0) * v.dAmpA * v.dGainT;
+                        break;
+                    case kDmClap: {
                         const double t = v.noteTime;
                         const bool burst = (t < 0.010) || (t > 0.014 && t < 0.024) || (t > 0.028 && t < 0.038);
-                        d = hiss * (burst ? 1.1f : (t >= 0.038 ? v.dAmpA * 0.9f : 0.0f));
+                        d = hiss * (burst ? v.dGainN : (t >= 0.038 ? v.dAmpA * v.dGainT : 0.0f));
                         break;
                     }
-                    case 5: case 7: case 9: d = fsin(v.phase1) * v.dAmpA * 1.1f; break;
-                    case 6: case 8: case 10: d = hiss * v.dAmpB * 1.1f; break;
-                    default: {
+                    case kDmHat:
+                        d = hiss * v.dAmpB * v.dGainN;
+                        break;
+                    case kDmMetal: {
+                        static const double kRatio[6] = { 1.0, 1.4471, 1.6170, 1.9265, 2.5028, 2.6637 };
+                        float sq = 0.0f;
+                        for (int k = 0; k < 6; ++k) {
+                            v.dPh[k] += dt * kRatio[k];
+                            if (v.dPh[k] >= 1.0) v.dPh[k] -= 1.0;
+                            sq += (v.dPh[k] < 0.5) ? 1.0f : -1.0f;
+                        }
+                        sq *= (1.0f / 6.0f);
+                        v.dHp += 0.45f * (sq - v.dHp);
+                        d = ((sq - v.dHp) * v.dGainT + hiss * v.dGainN) * v.dAmpB;
+                        break;
+                    }
+                    case kDmNes: {
+                        const float tri = static_cast<float>(4.0 * std::fabs(v.phase1 - 0.5) - 1.0);
+                        const float tri4 = std::floor(tri * 7.5f + 0.5f) * (1.0f / 7.5f);
+                        v.dClock += v.dAux * invSr;
+                        while (v.dClock >= 1.0) { v.dClock -= 1.0; lfsrStep(v.dLfsr, v.dColor >= 0.5f); }
+                        const float lf = (v.dLfsr & 1u) ? 0.8f : -0.8f;
+                        d = tri4 * v.dAmpA * v.dGainT + lf * v.dAmpB * v.dGainN;
+                        break;
+                    }
+                    case kDmBell: {
+                        static const double kRatio[4] = { 1.0, 2.76, 5.40, 8.93 };
+                        for (int k = 0; k < 4; ++k) {
+                            v.dPh[k] += dt * kRatio[k];
+                            if (v.dPh[k] >= 1.0) v.dPh[k] -= 1.0;
+                        }
+                        const float upper = fsin(v.dPh[1]) * 0.6f + fsin(v.dPh[2]) * 0.35f + fsin(v.dPh[3]) * 0.2f;
+                        d = (fsin(v.dPh[0]) * v.dAmpA + upper * v.dAmpB) * v.dGainT;
+                        break;
+                    }
+                    case kDmShaker:
+                        d = hiss * (1.0f - v.dAmpA) * v.dAmpB * v.dGainN;
+                        break;
+                    default: { // kDmCowbell
                         v.phase2 += dt * 1.48; if (v.phase2 >= 1.0) v.phase2 -= 1.0;
-                        d = ((v.phase1 < 0.5 ? 0.5f : -0.5f) + (v.phase2 < 0.5 ? 0.5f : -0.5f)) * v.dAmpA * 0.8f;
+                        d = ((v.phase1 < 0.5 ? 0.5f : -0.5f) + (v.phase2 < 0.5 ? 0.5f : -0.5f)) * v.dAmpA * v.dGainT;
                         break;
                     }
                 }

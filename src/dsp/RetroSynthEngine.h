@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../plugin/PixelLabsIds.h"
+#include "DemoSongs.h"
 #include <vector>
 #include <cmath>
 #include <cstdint>
@@ -64,18 +65,21 @@ struct Voice {
     float ksBlend = 0.3f;
 
     // Drum kit
-    int drumType = -1;
+    int drumType = -1;      // note name 0..11 while a drum is sounding
+    int drumModel = 0;
     float dAmpA = 0.0f, dAmpB = 0.0f, dPitch = 0.0f;
     float dCoefA = 0.0f, dCoefB = 0.0f, dCoefP = 0.0f;
     float dBaseHz = 100.0f, dRangeHz = 0.0f;
+    float dGainT = 1.0f, dGainN = 1.0f, dColor = 0.0f, dAux = 0.0f, dHp = 0.0f;
+    double dPh[6] = {};
+    double dClock = 0.0;
+    uint32_t dLfsr = 1u;
 };
 
 class RetroSynthEngine {
 public:
     static constexpr int kMaxVoices = 16;
     static constexpr int kCtrlInterval = 16; // samples between control-rate updates
-    static constexpr int kNumDemoSongs = 4;
-    static constexpr int kDemoTracks = 5;
 
     RetroSynthEngine();
     void prepare(double sampleRate, int maxBlockSize);
@@ -94,8 +98,6 @@ public:
     void allNotesOff();
 
     void renderBlock(float* outL, float* outR, int numSamples, SharedUITelemetry* telemetry);
-
-    static const char* demoSongName(int index);
 
 private:
     struct Comb {
@@ -148,14 +150,6 @@ private:
         void clear() { std::fill(buf.begin(), buf.end(), 0.0f); }
     };
 
-    struct DemoSong {
-        const char* name = "";
-        double stepSec = 0.12;
-        int numSteps = 0;
-        std::vector<int8_t> tracks[kDemoTracks]; // >=0 note on, -1 rest, -2 hold
-        float velocity[kDemoTracks] = { 0.9f, 0.78f, 0.3f, 0.3f, 0.5f };
-    };
-
     double sampleRate_ = 48000.0;
     float params_[kNumParams];
     float sm_[kNumParams]; // control-rate smoothed copies
@@ -192,8 +186,9 @@ private:
     bool delaySat_ = false;
 
     // Demo sequencer
-    DemoSong songs_[kNumDemoSongs];
+    const std::vector<DemoSong>& songs_;
     bool demoActive_ = false;
+    uint32_t demoRestartSeen_ = 0;
     int demoSongIdx_ = 0;
     double demoSampleCounter_ = 0.0;
     int demoStep_ = 0;
@@ -243,7 +238,6 @@ private:
 
     uint32_t noiseRng_ = 0x12345678u;
 
-    void buildDemoSongs();
     void updateControl();
     void updateVoiceControl(Voice& v, int voiceIndex);
     void applyReverbType(int type);

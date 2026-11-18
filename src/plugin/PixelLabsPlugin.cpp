@@ -298,6 +298,12 @@ tresult PLUGIN_API PixelLabsPlugin::setState(IBStream* state) {
     if (magic == 0x50584C33 && numRead >= static_cast<int32>(sizeof(StateSnapshot))) { // 'PXL3'
         StateSnapshot snap;
         std::memcpy(&snap, raw, sizeof(snap));
+        if (snap.version < 4) {
+            // Saved when there were 72 factory presets: re-spread the preset over today's list
+            for (double* v : { &snap.params[kParamPreset], &snap.refParams[kParamPreset] }) {
+                *v = listToNorm(normToList(*v, kNumFactoryPresetsV3), kNumFactoryPresets);
+            }
+        }
         const int pIdx = normToList(snap.params[kParamPreset], kNumFactoryPresets);
         synth_.applyPreset(pIdx);
         snap.params[kParamSustain] = 0.0; // a pedal is live input, never part of a saved sound
