@@ -33,6 +33,11 @@ inline const char* delayTypeName(int idx) {
     return kNames[std::clamp(idx, 0, kNumDelayTypes - 1)];
 }
 
+inline const char* touchName(int idx) {
+    static const char* kNames[kNumTouchCurves] = { "Off (Fixed)", "Light", "Normal", "Heavy" };
+    return kNames[std::clamp(idx, 0, kNumTouchCurves - 1)];
+}
+
 inline const char* noteName(int midiNote) {
     static const char* kNames[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     return kNames[((midiNote % 12) + 12) % 12];
@@ -57,6 +62,7 @@ inline void formatParamValue(int id, double v, char* buf, size_t n) {
         case kParamHarmony:    std::snprintf(buf, n, "%s", harmonyName(normToList(v, kNumHarmonyModes))); break;
         case kParamReverbType: std::snprintf(buf, n, "%s", reverbTypeName(normToList(v, kNumReverbTypes))); break;
         case kParamDelayType:  std::snprintf(buf, n, "%s", delayTypeName(normToList(v, kNumDelayTypes))); break;
+        case kParamTouch:      std::snprintf(buf, n, "%s", touchName(normToList(v, kNumTouchCurves))); break;
         case kParamPreset:     std::snprintf(buf, n, "%s", factoryPreset(normToList(v, kNumFactoryPresets)).name); break;
         case kParamSustain:    std::snprintf(buf, n, "%s", v >= 0.5 ? "On" : "Off"); break;
         case kParamPitchBend:  std::snprintf(buf, n, "%+.2f st", (v - 0.5) * 4.0); break;

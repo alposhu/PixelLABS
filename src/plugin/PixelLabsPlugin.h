@@ -3,8 +3,10 @@
 #include "vst3/vst3_abi.h"
 #include "PixelLabsIds.h"
 #include "../dsp/RetroSynthEngine.h"
+#include "../gui/EditorBridge.h"
 #include <atomic>
 #include <memory>
+#include <mutex>
 
 namespace PixelLabs {
 
@@ -12,7 +14,8 @@ class PixelLabsPlugin : public Steinberg::Vst::IComponent,
                         public Steinberg::Vst::IAudioProcessor,
                         public Steinberg::Vst::IProcessContextRequirements,
                         public Steinberg::Vst::IEditController,
-                        public Steinberg::Vst::IMidiMapping {
+                        public Steinberg::Vst::IMidiMapping,
+                        public IEditorBridge {
 public:
     PixelLabsPlugin();
     virtual ~PixelLabsPlugin();
@@ -81,6 +84,13 @@ public:
                                                               Steinberg::Vst::CtrlNumber midiControllerNumber,
                                                               Steinberg::Vst::ParamID& id) override;
 
+    // IEditorBridge (the editor's view of the loaded sound)
+    void editorSetParam(int id, float value) override;
+    void editorLoadFactory(int slot) override;
+    bool editorLoadUser(uint32_t id) override;
+    CurrentSoundInfo editorCurrentSound() override;
+    void editorSetCurrentSound(const CurrentSoundInfo& info) override;
+
 private:
     std::atomic<uint32_t> refCount_{1};
     bool initialized_ = false;
@@ -91,7 +101,13 @@ private:
     SharedUITelemetry telemetry_;
     Steinberg::Vst::IComponentHandler* componentHandler_ = nullptr;
 
+    std::mutex soundMutex_;
+    CurrentSoundInfo current_;
+
     void syncPresetToAllParams(int presetIdx, bool notifyHost);
+    void applySoundValues(const float* values, int era, bool notifyHost);
+    void setCurrentFactory(int slot);
+    void notifyHostParam(int id, float value);
 };
 
 } // namespace PixelLabs

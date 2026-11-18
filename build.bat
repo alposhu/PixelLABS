@@ -7,7 +7,7 @@ rem
 rem Needs Visual Studio 2022 or newer with the "Desktop development with C++" workload.
 setlocal EnableExtensions
 
-set "VERSION=1.0.0"
+set "VERSION=1.1.0"
 rem ^ keep in sync with src\plugin\Version.h
 
 set "ROOT=%~dp0"
@@ -38,6 +38,7 @@ echo [1/4] Plugin
 cl.exe %CXXFLAGS% /Fo"%BUILD%\obj\\" ^
     "%ROOT%src\dsp\RetroSynthEngine.cpp" ^
     "%ROOT%src\gui\PixelLabsView.cpp" ^
+    "%ROOT%src\library\SoundLibrary.cpp" ^
     "%ROOT%src\plugin\PixelLabsPlugin.cpp" ^
     "%ROOT%src\plugin\dllmain.cpp" ^
     /LD /Fe"%PLUGIN%" ^

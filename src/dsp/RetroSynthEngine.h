@@ -13,7 +13,8 @@ struct Voice {
     bool sustained = false; // held by the sustain pedal
     int midiNote = -1;
     int noteId = -1;
-    float velocity = 0.0f;
+    float velocity = 0.0f;  // after the touch curve; drives tone (FM index, pluck brightness)
+    float ampVel = 1.0f;    // loudness from velocity
     float pan = 0.5f;
     uint32_t age = 0;
 
@@ -83,9 +84,12 @@ public:
     void setParameterNormalized(int paramId, float normValue);
     float getParameterNormalized(int paramId) const;
     void applyPreset(int presetIndex);
+    void setEra(int era);   // user sounds carry the era of the preset they came from
+    int era() const { return currentEra_; }
     void setHostTempo(double bpm);
 
-    void noteOn(int pitch, float velocity, int noteId = -1);
+    // applyTouch = false keeps the fixed response (demo songs use velocity as a mix level)
+    void noteOn(int pitch, float velocity, int noteId = -1, bool applyTouch = true);
     void noteOff(int pitch, int noteId = -1);
     void allNotesOff();
 

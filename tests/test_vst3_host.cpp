@@ -1,11 +1,13 @@
 #include "vst3/vst3_abi.h"
 #include "../src/plugin/PixelLabsIds.h"
+// Header-only constants (layout anchors, preset count); the test links only against the DLL.
+#include "../src/presets/FactoryPresets.h"
+#include "../src/gui/PixelLabsView.h"
 
 namespace PixelLabs {
-// Mirrors of editor/preset constants (the test only links against the DLL).
-static constexpr int kNumFactoryPresetsForTest = 47;
-static constexpr int PixelLabsView_kDemoX = 700, PixelLabsView_kDemoY = 26;
-static constexpr int PixelLabsView_kThemeX = 800, PixelLabsView_kThemeY = 26;
+static constexpr int kNumFactoryPresetsForTest = kNumFactoryPresets;
+static constexpr int PixelLabsView_kDemoX = PixelLabsView::kDemoBtnX, PixelLabsView_kDemoY = PixelLabsView::kDemoBtnY;
+static constexpr int PixelLabsView_kThemeX = PixelLabsView::kThemeBtnX, PixelLabsView_kThemeY = PixelLabsView::kThemeBtnY;
 }
 #include <windows.h>
 #include <cstdio>
@@ -13,8 +15,9 @@ static constexpr int PixelLabsView_kThemeX = 800, PixelLabsView_kThemeY = 26;
 #include <cmath>
 #include <algorithm>
 #include <fstream>
-#include <cstring>
+#include <sstream>
 #include <string>
+#include <cstring>
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -169,6 +172,47 @@ static void writeWavFile(const char* path, const std::vector<float>& L, const st
     }
 }
 
+static std::string readFile(const char* path) {
+    std::ifstream f(path, std::ios::binary);
+    std::stringstream ss;
+    ss << f.rdbuf();
+    return ss.str();
+}
+
+static PixelLabs::StateSnapshot snapshotOf(IComponent* comp) {
+    MemStream st;
+    comp->getState(&st);
+    PixelLabs::StateSnapshot s = {};
+    if (st.data.size() >= sizeof(s)) std::memcpy(&s, st.data.data(), sizeof(s));
+    return s;
+}
+
+// Peak of one held note at a given velocity (fresh voices, tails flushed).
+static float notePeak(IAudioProcessor* proc, int pitch, float velocity) {
+    SimpleEventList on;
+    Event e = {};
+    e.type = Event::kNoteOnEvent;
+    e.noteOn.pitch = static_cast<int16>(pitch);
+    e.noteOn.velocity = velocity;
+    e.noteOn.noteId = 500;
+    on.addEvent(e);
+    std::vector<float> L, R;
+    renderBlocks(proc, 30, 512, &L, &R, &on);
+    SimpleEventList off;
+    Event o = {};
+    o.type = Event::kNoteOffEvent;
+    o.noteOff.pitch = static_cast<int16>(pitch);
+    o.noteOff.noteId = 500;
+    off.addEvent(o);
+    renderBlocks(proc, 1, 512, nullptr, nullptr, &off);
+    renderBlocks(proc, 300, 512, nullptr, nullptr);
+    // RMS of the held part (peaks wander with the random start phases)
+    double sum = 0.0;
+    size_t n = 0;
+    for (size_t i = 512 * 6; i < L.size(); ++i) { sum += static_cast<double>(L[i]) * L[i]; ++n; }
+    return n ? static_cast<float>(std::sqrt(sum / n)) : 0.0f;
+}
+
 static std::string g_outDir = "build\\test-output";
 static std::string outPath(const char* name) { return g_outDir + "\\" + name; }
 
@@ -177,6 +221,14 @@ int main(int argc, char** argv) {
     std::string vstPath = (argc > 1) ? argv[1] : "dist\\PixelLABS.vst3\\Contents\\x86_64-win\\PixelLABS.vst3";
     if (argc > 2) g_outDir = argv[2];
     CreateDirectoryA(g_outDir.c_str(), nullptr);
+    // Keep the test's sound library away from the user's real one
+    const std::string libDir = g_outDir + "\\test-library";
+    const std::string libPath = libDir + "\\PixelLABS_Library.txt";
+    CreateDirectoryA(libDir.c_str(), nullptr);
+    DeleteFileA(libPath.c_str());
+    SetEnvironmentVariableA("PIXELLABS_LIBRARY_DIR", libDir.c_str());
+    const char* libFile = libPath.c_str();
+
     HMODULE hMod = LoadLibraryA(vstPath.c_str());
     if (!hMod) {
         std::printf("FAIL: Could not load VST3 DLL\n");
@@ -253,7 +305,8 @@ int main(int argc, char** argv) {
         proc->process(pData);
     }
 
-    CHECK(ctrl->getParameterCount() == PixelLabs::kNumParams, "35 parameters registered");
+    CHECK(ctrl->getParameterCount() == PixelLabs::kNumParams, "37 parameters registered");
+    CHECK(ctrl->getParamNormalized(PixelLabs::kParamSustain) < 0.5, "a fresh instance starts with the pedal up");
 
     // 2. Every factory preset renders a held chord without NaNs or silence
     {
@@ -296,18 +349,77 @@ int main(int argc, char** argv) {
         CHECK(silent == 0, "every preset makes sound");
     }
 
-    // 3. State round trip (PXL2) and v1 project migration (PXL1)
+    const double kLast = PixelLabs::kNumFactoryPresetsForTest - 1;
+
+    // 2b. Keyboard touch: velocity sensitivity and curve
     {
-        ctrl->setParamNormalized(PixelLabs::kParamPreset, 30.0 / 46.0);
+        ctrl->setParamNormalized(PixelLabs::kParamPreset, 8.0 / kLast); // Pulse Hero Lead: velocity only sets level
+        // Dry and below the output limiter, so the level is linear in the voice gain
+        for (int id : { PixelLabs::kParamReverb, PixelLabs::kParamDelay, PixelLabs::kParamChorus, PixelLabs::kParamVibrato })
+            ctrl->setParamNormalized(id, 0.0);
+        ctrl->setParamNormalized(PixelLabs::kParamExpression, 0.45);
+        const float hardDef = notePeak(proc, 64, 1.0f), softDef = notePeak(proc, 64, 0.3f);
+        const double expect = 0.35 + 0.65 * 0.3; // the original fixed response
+        std::printf("    default touch: soft/hard %.3f (expect ~%.3f)\n", softDef / hardDef, expect);
+        CHECK(std::fabs(softDef / hardDef - expect) < 0.08, "default touch keeps the original velocity response");
+
+        ctrl->setParamNormalized(PixelLabs::kParamVelSens, 1.0);
+        const float softFull = notePeak(proc, 64, 0.3f), hardFull = notePeak(proc, 64, 1.0f);
+        std::printf("    100%% sens: soft/hard %.3f\n", softFull / hardFull);
+        CHECK(softFull / hardFull < 0.42, "full sensitivity makes soft notes clearly quieter");
+
+        ctrl->setParamNormalized(PixelLabs::kParamTouch, PixelLabs::listToNorm(PixelLabs::kTouchHeavy, PixelLabs::kNumTouchCurves));
+        const float softHeavy = notePeak(proc, 64, 0.5f);
+        ctrl->setParamNormalized(PixelLabs::kParamTouch, PixelLabs::listToNorm(PixelLabs::kTouchLight, PixelLabs::kNumTouchCurves));
+        const float softLight = notePeak(proc, 64, 0.5f);
+        CHECK(softLight > softHeavy * 1.5f, "light touch is louder than heavy touch at the same velocity");
+
+        ctrl->setParamNormalized(PixelLabs::kParamTouch, PixelLabs::listToNorm(PixelLabs::kTouchOff, PixelLabs::kNumTouchCurves));
+        const float offSoft = notePeak(proc, 64, 0.1f), offHard = notePeak(proc, 64, 1.0f);
+        std::printf("    touch off: soft/hard %.3f\n", offSoft / offHard);
+        CHECK(std::fabs(offSoft / offHard - 1.0f) < 0.05f, "touch off plays every velocity at the same level");
+
+        ctrl->setParamNormalized(PixelLabs::kParamPreset, 20.0 / kLast);
+        CHECK(std::fabs(ctrl->getParamNormalized(PixelLabs::kParamTouch)) < 1e-6, "loading a preset keeps the touch setting");
+        ctrl->setParamNormalized(PixelLabs::kParamTouch, PixelLabs::listToNorm(PixelLabs::kTouchNormal, PixelLabs::kNumTouchCurves));
+        ctrl->setParamNormalized(PixelLabs::kParamVelSens, PixelLabs::kDefaultVelSens);
+    }
+
+    // 3. State round trip (PXL3), v2 projects (PXL2) and v1 projects (PXL1)
+    {
+        ctrl->setParamNormalized(PixelLabs::kParamPreset, 30.0 / kLast);
         ctrl->setParamNormalized(PixelLabs::kParamPhaser, 0.66);
         MemStream st;
         comp->getState(&st);
-        CHECK(st.data.size() == sizeof(PixelLabs::StateSnapshot), "getState writes a PXL2 snapshot");
+        CHECK(st.data.size() == sizeof(PixelLabs::StateSnapshot), "getState writes a PXL3 snapshot");
         ctrl->setParamNormalized(PixelLabs::kParamPreset, 0.0);
         st.pos = 0;
         comp->setState(&st);
-        CHECK(std::fabs(ctrl->getParamNormalized(PixelLabs::kParamPhaser) - 0.66) < 1e-4, "PXL2 restores new FX params");
-        CHECK(std::fabs(ctrl->getParamNormalized(PixelLabs::kParamPreset) - 30.0 / 46.0) < 1e-4, "PXL2 restores preset slot");
+        CHECK(std::fabs(ctrl->getParamNormalized(PixelLabs::kParamPhaser) - 0.66) < 1e-4, "PXL3 restores FX params");
+        CHECK(std::fabs(ctrl->getParamNormalized(PixelLabs::kParamPreset) - 30.0 / kLast) < 1e-4, "PXL3 restores preset slot");
+        {
+            const PixelLabs::StateSnapshot s = snapshotOf(comp);
+            CHECK(s.soundKind == 0 && s.soundId == 30 && std::strcmp(s.soundName, PixelLabs::factoryPreset(30).name) == 0,
+                  "PXL3 remembers which sound is loaded");
+            CHECK(std::fabs(s.refParams[PixelLabs::kParamPhaser] - PixelLabs::factoryPreset(30).values[PixelLabs::kParamPhaser]) < 1e-6,
+                  "the edit stays an edit after reload (stored values kept apart)");
+        }
+
+        PixelLabs::StateSnapshotV2 v2 = {};
+        v2.magic = 0x50584C32;
+        v2.version = 2;
+        for (int i = 0; i < PixelLabs::kNumParamsV2; ++i) v2.params[i] = PixelLabs::factoryPreset(20).values[i];
+        v2.params[PixelLabs::kParamPreset] = 20.0 / 46.0; // slot 21 of the old 47-preset bank
+        v2.params[PixelLabs::kParamDelay] = 0.91;
+        v2.eraTab = 3;
+        MemStream old2;
+        old2.write(&v2, sizeof(v2), nullptr);
+        old2.pos = 0;
+        comp->setState(&old2);
+        CHECK(std::fabs(ctrl->getParamNormalized(PixelLabs::kParamPreset) - 20.0 / kLast) < 1e-4, "v2 preset slot maps to the same sound");
+        CHECK(std::fabs(ctrl->getParamNormalized(PixelLabs::kParamDelay) - 0.91) < 1e-4, "v2 knob values survive");
+        CHECK(std::fabs(ctrl->getParamNormalized(PixelLabs::kParamVelSens) - PixelLabs::kDefaultVelSens) < 1e-4,
+              "v2 projects get the default touch");
 
         PixelLabs::StateSnapshotV1 v1 = {};
         v1.magic = 0x50584C31;
@@ -321,7 +433,7 @@ int main(int argc, char** argv) {
         old.write(&v1, sizeof(v1), nullptr);
         old.pos = 0;
         comp->setState(&old);
-        CHECK(std::fabs(ctrl->getParamNormalized(PixelLabs::kParamPreset) - 3.0 / 46.0) < 1e-4, "v1 preset slot maps to the same sound");
+        CHECK(std::fabs(ctrl->getParamNormalized(PixelLabs::kParamPreset) - 3.0 / kLast) < 1e-4, "v1 preset slot maps to the same sound");
         CHECK(std::fabs(ctrl->getParamNormalized(PixelLabs::kParamWaveform) - 8.0 / 19.0) < 1e-4, "v1 FM waveform maps to 16-Bit FM");
         CHECK(std::fabs(ctrl->getParamNormalized(PixelLabs::kParamReverb) - 0.77) < 1e-4, "v1 knob values survive");
         CHECK(ctrl->getParamNormalized(PixelLabs::kParamSustain) < 0.5, "loading a project never leaves the pedal held");
@@ -359,7 +471,7 @@ int main(int argc, char** argv) {
         };
         const int blockSamples = 1200; // 25 ms
         for (const Shot& sh : shots) {
-            ctrl->setParamNormalized(PixelLabs::kParamPreset, sh.preset / 46.0);
+            ctrl->setParamNormalized(PixelLabs::kParamPreset, sh.preset / kLast);
             click(PixelLabs::PixelLabsView_kDemoX, PixelLabs::PixelLabsView_kDemoY); // demo on
             std::vector<float> L, R;
             const int blocks = static_cast<int>(sh.seconds * 48000.0 / blockSamples);
@@ -382,7 +494,7 @@ int main(int argc, char** argv) {
         }
 
         // Drum kit + on-screen keyboard: click C2 (kick) on the keyboard
-        ctrl->setParamNormalized(PixelLabs::kParamPreset, 1.0);
+        ctrl->setParamNormalized(PixelLabs::kParamPreset, 46.0 / kLast);
         SendMessageW(childWnd, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(24, 580));
         std::vector<float> kL, kR;
         renderBlocks(proc, 8, 512, &kL, &kR);
@@ -392,7 +504,7 @@ int main(int argc, char** argv) {
         CHECK(peakOf(kL) > 0.05f, "clicking an on-screen key plays the kick");
 
         // Cycle skins (AUTO -> NES -> ... -> PAPER) and save the NEON and PAPER looks
-        ctrl->setParamNormalized(PixelLabs::kParamPreset, 23.0 / 46.0);
+        ctrl->setParamNormalized(PixelLabs::kParamPreset, 23.0 / kLast);
         for (int t = 1; t <= 6; ++t) {
             click(PixelLabs::PixelLabsView_kThemeX, PixelLabs::PixelLabsView_kThemeY);
             if (t == 6) {
@@ -401,6 +513,145 @@ int main(int argc, char** argv) {
             }
         }
         click(PixelLabs::PixelLabsView_kThemeX, PixelLabs::PixelLabsView_kThemeY); // back to AUTO
+
+        // ---- 5. Library: save as, unsaved-changes prompt, favourites, banks ----
+        using V = PixelLabs::PixelLabsView;
+        auto frame = [&]() { SendMessageW(childWnd, WM_TIMER, 1001, 0); };
+        auto clickF = [&](int x, int y) { frame(); click(x, y); frame(); };
+        auto type = [&](const char* s) { for (const char* p = s; *p; ++p) SendMessageW(childWnd, WM_CHAR, static_cast<WPARAM>(*p), 0); };
+        auto key = [&](int vk) { SendMessageW(childWnd, WM_KEYDOWN, vk, 0); SendMessageW(childWnd, WM_KEYUP, vk, 0); };
+        auto shot = [&](const char* file) { frame(); saveWindowBmp(childWnd, r.getWidth(), r.getHeight(), outPath(file).c_str()); };
+        const int actionCy = V::kActionY + V::kActionH / 2;
+        auto confirmBtn = [&](int i, int n) { clickF(V::confirmBtnX(i, n) + V::kConfirmBtnW / 2, V::kConfirmBtnY + 15); };
+        {
+            ctrl->setParamNormalized(PixelLabs::kParamPreset, 19.0 / kLast); // Neon Sunset Lead
+            ctrl->setParamNormalized(PixelLabs::kParamDelay, 0.90);           // tweak an effect
+            ctrl->setParamNormalized(PixelLabs::kParamCrush, 0.40);
+            clickF(V::kSaveAsBtnX + V::kActionW / 2, actionCy);               // SAVE AS -> name dialog
+            key(VK_DELETE);                                                   // clear the suggestion
+            type("my neon");
+            shot("ui_save_as.bmp");
+            key(VK_RETURN);
+            frame();
+            std::string lib = readFile(libFile);
+            CHECK(lib.find("\tMY NEON\t") != std::string::npos, "SAVE AS writes the edited sound to the library file");
+            CHECK(lib.find(" 5=900000 ") != std::string::npos, "the saved sound keeps the changed delay");
+            PixelLabs::StateSnapshot s = snapshotOf(comp);
+            CHECK(s.soundKind == 1 && std::strcmp(s.soundName, "MY NEON") == 0, "the saved copy becomes the loaded sound");
+            const uint32_t myId = s.soundId;
+
+            // Edit it again, then switch: the editor must ask first
+            ctrl->setParamNormalized(PixelLabs::kParamChorus, 0.05);
+            clickF(236 + 392 - 15, 28);                                       // next sound arrow
+            shot("ui_unsaved_prompt.bmp");
+            s = snapshotOf(comp);
+            CHECK(s.soundKind == 1 && s.soundId == myId, "switching waits while the unsaved prompt is open");
+            confirmBtn(0, 4);                                                 // SAVE (overwrite), then switch
+            s = snapshotOf(comp);
+            lib = readFile(libFile);
+            CHECK(s.soundKind == 0, "after SAVE the next sound loads");
+            CHECK(lib.find(" 4=50000 ") != std::string::npos, "SAVE overwrote the sound with the new chorus");
+
+            // Edit the factory sound and switch with DON'T SAVE
+            ctrl->setParamNormalized(PixelLabs::kParamReverb, 0.99);
+            const uint32_t before = snapshotOf(comp).soundId;
+            clickF(236 + 15, 28);                                             // previous sound arrow
+            confirmBtn(1, 3);                                                 // DON'T SAVE
+            s = snapshotOf(comp);
+            CHECK(s.soundId != before || s.soundKind != 0, "DON'T SAVE switches without saving");
+            CHECK(readFile(libFile) == lib, "DON'T SAVE leaves the library alone");
+
+            // Same switch, but SAVE AS from the prompt: name it, then the switch happens
+            ctrl->setParamNormalized(PixelLabs::kParamDrive, 0.70);
+            clickF(236 + 392 - 15, 28);
+            if (s.soundKind == 1) confirmBtn(1, 4); else confirmBtn(0, 3);    // SAVE AS...
+            key(VK_DELETE);
+            type("crunchy");
+            clickF(V::kNameOkX + 70, V::kNameBtnY + 15);                      // SAVE button
+            lib = readFile(libFile);
+            CHECK(lib.find("\tCRUNCHY\t") != std::string::npos, "SAVE AS from the prompt stores the sound");
+            CHECK(snapshotOf(comp).soundKind == 0, "...and then switches to the next sound");
+
+            // Favourite the loaded sound with the header star
+            clickF(V::kHeaderStarX, V::kHeaderStarY);
+            CHECK(readFile(libFile).find("FAV\tF") != std::string::npos, "header star adds a favorite");
+
+            // MY SOUNDS tab lists both saved sounds; load MY NEON from it
+            clickF(V::tabX(PixelLabs::kTabUser) + 20, V::kTabY + 12);
+            shot("ui_my_sounds.bmp");
+            clickF(V::kRowX + 60, V::kRowsTop + 9);                           // first row
+            s = snapshotOf(comp);
+            CHECK(s.soundKind == 1 && std::strcmp(s.soundName, "MY NEON") == 0, "clicking a saved sound loads it");
+            CHECK(std::fabs(ctrl->getParamNormalized(PixelLabs::kParamChorus) - 0.05) < 1e-3, "...with its saved effects");
+
+            // BANKS: make a bank, then put the loaded sound in it with + BANK
+            clickF(V::tabX(PixelLabs::kTabBanks) + 20, V::kTabY + 12);
+            clickF(V::kRowX + 60, V::kRowsTop + 9);                           // "+ NEW BANK"
+            key(VK_DELETE);
+            type("live set");
+            key(VK_RETURN);
+            frame();
+            CHECK(readFile(libFile).find("BANK\t") != std::string::npos &&
+                  readFile(libFile).find("\tLIVE SET\t") != std::string::npos, "a named bank is created");
+            clickF(V::kBankBtnX + V::kActionW / 2, actionCy);                // + BANK -> picker
+            shot("ui_bank_picker.bmp");
+            clickF(V::kPickX + 100, V::kPickRowsTop + 10);                    // first bank: LIVE SET
+            clickF(V::kPickDoneX + 55, V::kPickBtnY + 15);                    // DONE
+            lib = readFile(libFile);
+            const size_t bankLine = lib.find("\tLIVE SET\t");
+            CHECK(bankLine != std::string::npos && lib.find("U", bankLine) != std::string::npos,
+                  "+ BANK adds the sound to the chosen bank");
+            shot("ui_banks.bmp");
+
+            // Clicking keycaps types too; host key path (onKeyDown) works as well
+            clickF(V::kBankBtnX + V::kActionW / 2, actionCy);                // picker again
+            clickF(V::kPickX + 100, V::kPickRowsTop + 10 + V::kPickRowH);     // "+ NEW BANK..."
+            key(VK_DELETE);
+            clickF(V::kNameDlgX + 42 + 0 * 40 + 18, V::kNameDlgY + 110 + 26 + 11); // Q
+            clickF(V::kNameDlgX + 42 + 0 * 40 + 18, V::kNameDlgY + 110 + 11);      // 1
+            Sleep(60);
+            view->onKeyDown('z', 0, 0);                                       // host key path
+            SendMessageW(childWnd, WM_CHAR, 'z', 0);                          // the same keystroke echoed natively: dropped
+            Sleep(60);
+            key(VK_RETURN);
+            frame();
+            CHECK(readFile(libFile).find("\tQ1Z\t") != std::string::npos, "keycaps and host keys type into the name box");
+            clickF(V::kPickDoneX + 55, V::kPickBtnY + 15);                    // close the picker
+
+            // A project with a saved sound comes back with its name
+            MemStream proj;
+            comp->getState(&proj);
+            ctrl->setParamNormalized(PixelLabs::kParamPreset, 0.0);
+            proj.pos = 0;
+            comp->setState(&proj);
+            s = snapshotOf(comp);
+            CHECK(s.soundKind == 1 && std::strcmp(s.soundName, "MY NEON") == 0, "project reload keeps the saved sound's name");
+
+            // Computer-keyboard keys type into a dialog instead of playing notes
+            renderBlocks(proc, 500, 512, nullptr, nullptr);                   // let every tail die
+            clickF(V::kSaveAsBtnX + V::kActionW / 2, actionCy);
+            key(VK_DELETE);
+            std::vector<float> tailL, qL, qR;
+            renderBlocks(proc, 20, 512, &tailL, nullptr);                     // echo tail still ringing
+            SendMessageW(childWnd, WM_KEYDOWN, 'A', 0);
+            renderBlocks(proc, 20, 512, &qL, &qR);
+            SendMessageW(childWnd, WM_KEYUP, 'A', 0);
+            std::printf("    typing in a dialog: tail %.5f -> %.5f\n", peakOf(tailL), peakOf(qL));
+            CHECK(peakOf(qL) <= peakOf(tailL) * 1.2f + 1e-4f, "keys pressed in a dialog do not play notes");
+            const std::string libBefore = readFile(libFile);
+            key(VK_ESCAPE);
+            frame();
+            CHECK(snapshotOf(comp).soundKind == 1 && readFile(libFile) == libBefore, "ESC closes the dialog without saving");
+
+            // Delete a saved sound from MY SOUNDS (hover shows the tools, then confirm)
+            clickF(V::tabX(PixelLabs::kTabUser) + 20, V::kTabY + 12);
+            SendMessageW(childWnd, WM_MOUSEMOVE, 0, MAKELPARAM(V::kRowX + 60, V::kRowsTop + V::kRowH + 9));
+            clickF(V::kRowX + V::kRowW - 22, V::kRowsTop + V::kRowH + 9);    // X on row 2 (CRUNCHY)
+            confirmBtn(0, 2);                                                 // DELETE
+            lib = readFile(libFile);
+            CHECK(lib.find("\tCRUNCHY\t") == std::string::npos && lib.find("\tMY NEON\t") != std::string::npos,
+                  "deleting removes only that sound");
+        }
 
         view->removed();
         view->release();

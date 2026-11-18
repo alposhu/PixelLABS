@@ -186,6 +186,12 @@ const char* RetroSynthEngine::demoSongName(int index) {
 
 RetroSynthEngine::RetroSynthEngine() {
     for (int i = 0; i < kNumParams; ++i) { params_[i] = 0.5f; sm_[i] = 0.5f; }
+    // Preset loads skip the live controls, so give them real defaults here
+    // (a 0.5 sustain value would read as a held pedal).
+    params_[kParamPitchBend] = 0.5f;
+    params_[kParamSustain] = 0.0f;
+    params_[kParamVelSens] = kDefaultVelSens;
+    params_[kParamTouch] = listToNorm(kTouchNormal, kNumTouchCurves);
     buildDemoSongs();
     applyPreset(0);
     for (int i = 0; i < kNumParams; ++i) sm_[i] = params_[i];
@@ -452,10 +458,14 @@ float RetroSynthEngine::getParameterNormalized(int paramId) const {
 void RetroSynthEngine::applyPreset(int presetIndex) {
     const FactoryPreset& p = factoryPreset(presetIndex);
     for (int i = 0; i < kNumParams; ++i) {
-        if (i == kParamPitchBend || i == kParamSustain) continue; // live controller state
+        if (isPerformanceParam(i) && i != kParamPreset) continue; // live controller / keyboard state
         params_[i] = p.values[i];
     }
     currentEra_ = p.era;
+}
+
+void RetroSynthEngine::setEra(int era) {
+    currentEra_ = std::clamp(era, 0, kNumEras - 1);
 }
 
 void RetroSynthEngine::setHostTempo(double bpm) {
@@ -508,7 +518,7 @@ void RetroSynthEngine::exciteString(Voice& v, int voiceIndex, double freq1, doub
     v.ksPrev1 = v.ksPrev2 = 0.0f;
 }
 
-void RetroSynthEngine::noteOn(int pitch, float velocity, int noteId) {
+void RetroSynthEngine::noteOn(int pitch, float velocity, int noteId, bool applyTouch) {
     if (pitch < 0 || pitch > 127) return;
     if (velocity <= 0.0001f) {
         noteOff(pitch, noteId);
@@ -566,7 +576,26 @@ void RetroSynthEngine::noteOn(int pitch, float velocity, int noteId) {
     v.sustained = false;
     v.midiNote = pitch;
     v.noteId = noteId;
-    v.velocity = std::clamp(velocity, 0.05f, 1.0f);
+    {
+        // Touch: the curve reshapes how hard you have to play, Velocity Sens sets how much it matters.
+        // Normal curve at the default 65% reproduces the original response exactly.
+        const float raw = std::clamp(velocity, 0.0f, 1.0f);
+        float curved = raw;
+        float sens = std::clamp(params_[kParamVelSens], 0.0f, 1.0f);
+        if (applyTouch) {
+            switch (normToList(params_[kParamTouch], kNumTouchCurves)) {
+                case kTouchOff:   sens = 0.0f; break;
+                case kTouchLight: curved = std::pow(raw, 0.55f); break;
+                case kTouchHeavy: curved = std::pow(raw, 1.8f); break;
+                default: break;
+            }
+        } else {
+            sens = kDefaultVelSens;
+        }
+        const float toneSens = std::min(1.0f, sens / kDefaultVelSens);
+        v.ampVel = 1.0f - sens * (1.0f - curved);
+        v.velocity = std::clamp(1.0f - toneSens * (1.0f - curved), 0.05f, 1.0f);
+    }
     v.age = 0;
     v.noteTime = 0.0;
     v.arpTimer = 0.0;
@@ -978,8 +1007,12 @@ void RetroSynthEngine::renderBlock(float* outL, float* outR, int numSamples, Sha
     if (telemetry) {
         int pitch = 0, vel = 0;
         while (telemetry->popGuiNote(pitch, vel)) {
-            if (vel > 0) noteOn(pitch, vel / 127.0f, 9999);
-            else noteOff(pitch, 9999);
+            if (vel > 0) {
+                noteOn(pitch, vel / 127.0f, 9999);
+                telemetry->lastVelocity.store(vel, std::memory_order_relaxed);
+            } else {
+                noteOff(pitch, 9999);
+            }
         }
 
         const bool reqDemo = (telemetry->demoActive.load(std::memory_order_relaxed) != 0);
@@ -1023,7 +1056,7 @@ void RetroSynthEngine::renderBlock(float* outL, float* outR, int numSamples, Sha
                         demoPrev_[t] = -1;
                     }
                     if (val >= 0) {
-                        noteOn(val, song.velocity[t], 9901 + t);
+                        noteOn(val, song.velocity[t], 9901 + t, false);
                         demoPrev_[t] = val;
                     }
                 }
@@ -1303,7 +1336,7 @@ void RetroSynthEngine::renderBlock(float* outL, float* outR, int numSamples, Sha
             v.ic1eq = 2.0f * v1 - v.ic1eq;
             v.ic2eq = 2.0f * v2 - v.ic2eq;
 
-            const float voiceOut = v2 * v.envLevel * (0.35f + 0.65f * v.velocity) * 0.30f * waveGain;
+            const float voiceOut = v2 * v.envLevel * v.ampVel * 0.30f * waveGain;
             dryL += voiceOut * (1.0f - v.pan * 0.5f);
             dryR += voiceOut * (0.5f + v.pan * 0.5f);
         }

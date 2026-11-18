@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.1.0
+
+### Sound
+- **Presets:** 25 new factory presets, 72 in all. They are added after the old ones, so existing projects keep their sounds.
+  - **80s chip:** Octave Bounce Bass, Echo Canyon Lead, Minor Key Arp, Square Brass Stab, Chip Harmonica.
+  - **90s chip:** Wave Channel Lead, Tracker Rock Organ, Battle Brass Hit, Handheld Glow Pad, Pocket Kalimba.
+  - **Synth 80s:** Ensemble Strings 79, Supersaw Anthem, Neon Pluck, Midnight Sub Bass, Machine Choir.
+  - **Medieval:** Shepherd Pan Pipes, Bright Psaltery, Capped Crumhorn, Abbey Choir AH, Rebec Fiddle.
+  - **SFX + kit:** Stadium Drum Kit, Handheld Crunch Kit, Warp Portal, Red Alert Klaxon, Bubble Pop.
+- **Touch:** new `TOUCH` (Off / Light / Normal / Heavy) and `VEL SENS` settings. Changing sounds keeps them, and Normal at 65 % matches 1.0.0. Clicking lower on an on-screen key plays harder.
+
+### Sound library
+- **Save / Save As:** any edit, effects included, marks the sound `EDITED`. `SAVE AS` stores it under a new name, and `SAVE` overwrites a sound you saved before.
+- **Unsaved changes:** switching away from an edited sound asks first: Save, Save As, Don't Save or Cancel.
+- **New tabs:** `MY SOUNDS`, `FAVORITES` and `BANKS`. Click a star to add a favorite. Make as many named banks as you like and add sounds with `+ BANK`.
+- **Shared file:** the library is stored in `%APPDATA%\PixelLABS\PixelLABS_Library.txt` and shared by every instance.
+- **Projects:** a project remembers which sound is loaded and whether it was edited. It still opens correctly on a computer without your library.
+
+### Host integration
+- **Automation:** 37 automatable parameters; Velocity Sens and Touch Curve are new.
+- **Older projects:** projects saved with 1.0.0 and pre-release builds load unchanged and get the default touch.
+
+### Fixes
+- **Sustain pedal:** a freshly added instance no longer starts with the sustain pedal held.
+- **Hover help:** the help line now also explains the keyboard and the bottom strip.
+
 ## 1.0.0
 
 First public release.

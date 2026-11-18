@@ -14,7 +14,8 @@ struct FactoryPreset {
     float values[kNumParams] = {};
 };
 
-static constexpr int kNumFactoryPresets = 47;
+// Slots are append-only: a project stores the slot index, so existing slots never move.
+static constexpr int kNumFactoryPresets = 72;
 
 static const char* const kEraNames[kNumEras] = {
     "80S CHIP", "90S CHIP", "SYNTH 80S", "MEDIEVAL", "SFX + KIT"
@@ -57,6 +58,8 @@ public:
         v[kParamAttack] = 0.02f;      v[kParamDecay] = 0.40f;
         v[kParamSustainLevel] = 0.80f; v[kParamRelease] = 0.30f;
         v[kParamFilterEnv] = 0.30f;   v[kParamDetune] = 0.40f;
+        v[kParamVelSens] = kDefaultVelSens;
+        v[kParamTouch] = listToNorm(kTouchNormal, kNumTouchCurves);
     }
 
     Builder& set(int id, float value)   { p_.values[id] = value; return *this; }
@@ -311,6 +314,118 @@ struct PresetBank {
             .wave(kWaveDrums).dyn(0.50f).env(0.0f, 0.40f, 1.0f, 0.20f)
             .filt(1.0f, 0.0f, 0.0f).sub(0.0f).vib(0.0f).detune(0.0f)
             .reverb(0.12f, kRevRoom).delay(0.0f, kDlyPing).chorus(0.0f).crush(0.08f).macro(7));
+
+        // ================= Expansion bank (slots 47..71) =================
+
+        // ---- 80s chip ----
+        add(B("Octave Bounce Bass", "BASS", kEraChip80, "Fast octave-flip square bass, home-computer style")
+            .wave(kWavePulse50).harm(kHarmArpOctave).arp(25.0f).dyn(0.45f).env(0.0f, 0.32f, 0.78f, 0.12f)
+            .filt(0.78f, 0.20f, 0.30f).sub(0.35f).vib(0.0f).detune(0.20f)
+            .reverb(0.08f, kRevRoom).delay(0.0f, kDlyPing).chorus(0.0f).crush(0.08f).macro(7));
+        add(B("Echo Canyon Lead", "LEAD", kEraChip80, "Thin 12.5% pulse lead lost in a long echo")
+            .wave(kWavePulse12).dyn(0.50f).env(0.0f, 0.40f, 0.76f, 0.30f)
+            .filt(0.88f, 0.12f, 0.30f).sub(0.10f).vib(0.42f).detune(0.30f)
+            .reverb(0.34f, kRevHall).delay(0.46f, kDlyCanyon).chorus(0.15f).macro(1));
+        add(B("Minor Key Arp", "ARP", kEraChip80, "Brooding minor-chord arpeggio, one key per chord")
+            .wave(kWavePulse25).harm(kHarmArpMinor).arp(40.0f).dyn(0.58f).env(0.0f, 0.38f, 0.62f, 0.30f)
+            .filt(0.82f, 0.22f, 0.40f).sub(0.15f).vib(0.10f).detune(0.40f)
+            .reverb(0.30f, kRevHall).delay(0.32f, kDlyPing).chorus(0.25f).crush(0.10f).macro(1));
+        add(B("Square Brass Stab", "BRASS", kEraChip80, "Square fifths with a swelling filter, 8-bit fanfare")
+            .wave(kWavePulse50).harm(kHarmFifth).dyn(0.60f).env(0.06f, 0.44f, 0.70f, 0.22f)
+            .filt(0.46f, 0.26f, 0.62f).sub(0.30f).vib(0.20f).detune(0.50f)
+            .reverb(0.28f, kRevHall).delay(0.14f, kDlyPing).chorus(0.30f).crush(0.06f).macro(0));
+        add(B("Chip Harmonica", "SOLO", kEraChip80, "Reedy pulse-width solo with breath and wobble")
+            .wave(kWavePwm).dyn(0.22f).env(0.05f, 0.30f, 0.86f, 0.16f)
+            .filt(0.66f, 0.18f, 0.25f).sub(0.05f).vib(0.46f).noise(0.08f).detune(0.30f)
+            .reverb(0.24f, kRevRoom).delay(0.10f, kDlySlap).chorus(0.10f).trem(0.18f).macro(11));
+
+        // ---- 90s chip ----
+        add(B("Wave Channel Lead", "LEAD", kEraChip90, "Hollow 4-bit wavetable lead through a small speaker")
+            .wave(kWaveGbWave).dyn(0.66f).env(0.0f, 0.34f, 0.80f, 0.18f)
+            .filt(0.86f, 0.10f, 0.20f).sub(0.05f).vib(0.48f).detune(0.25f)
+            .reverb(0.14f, kRevRoom).delay(0.26f, kDly16Bit).chorus(0.0f).speaker(0.35f).macro(8));
+        add(B("Tracker Rock Organ", "ORGAN", kEraChip90, "Driven FM organ with an octave drawbar and tremolo")
+            .wave(kWaveFm16).harm(kHarmOctave).dyn(0.30f).env(0.01f, 0.30f, 0.95f, 0.14f)
+            .filt(0.80f, 0.12f, 0.15f).sub(0.30f).vib(0.10f).detune(0.40f)
+            .reverb(0.26f, kRevRoom).delay(0.0f, kDlyPing).chorus(0.30f).drive(0.30f).trem(0.20f).macro(6));
+        add(B("Battle Brass Hit", "BRASS", kEraChip90, "Short FM brass hit in fifths, boss-fight energy")
+            .wave(kWaveFm16).harm(kHarmFifth).dyn(0.85f).env(0.02f, 0.36f, 0.30f, 0.20f)
+            .filt(0.74f, 0.20f, 0.50f).sub(0.30f).vib(0.10f).detune(0.40f)
+            .reverb(0.38f, kRevHall).delay(0.12f, kDly16Bit).chorus(0.35f).macro(0));
+        add(B("Handheld Glow Pad", "PAD", kEraChip90, "Soft sine-table pad, slow fade, gentle chorus")
+            .wave(kWaveGbWave).dyn(0.0f).env(0.46f, 0.55f, 0.92f, 0.52f)
+            .filt(0.70f, 0.10f, 0.15f).sub(0.15f).vib(0.22f).detune(0.62f).width(0.72f)
+            .reverb(0.48f, kRevHall).delay(0.22f, kDly16Bit).chorus(0.62f).speaker(0.15f).macro(2));
+        add(B("Pocket Kalimba", "MALLET", kEraChip90, "Short FM thumb-piano plinks with a 16-bit echo")
+            .wave(kWaveBell).dyn(0.22f).env(0.0f, 0.46f, 0.0f, 0.32f)
+            .filt(0.86f, 0.08f, 0.20f).sub(0.0f).vib(0.0f).detune(0.20f).width(0.64f)
+            .reverb(0.30f, kRevRoom).delay(0.30f, kDly16Bit).chorus(0.15f).macro(1));
+
+        // ---- Synth 80s ----
+        add(B("Ensemble Strings 79", "STRINGS", kEraSynth, "Lush string machine with phaser and wide chorus")
+            .wave(kWaveSoftStr).dyn(0.66f).env(0.30f, 0.50f, 0.92f, 0.50f)
+            .filt(0.72f, 0.12f, 0.15f).sub(0.10f).vib(0.12f).detune(0.66f).width(0.80f)
+            .reverb(0.42f, kRevHall).delay(0.12f, kDlyTape).chorus(0.78f).phaser(0.36f).macro(3));
+        add(B("Supersaw Anthem", "LEAD", kEraSynth, "Huge detuned saw lead with an octave and tape echo")
+            .wave(kWaveChipSaw).harm(kHarmOctave).dyn(0.62f).env(0.01f, 0.40f, 0.85f, 0.30f)
+            .filt(0.78f, 0.22f, 0.30f).sub(0.10f).vib(0.30f).detune(0.80f).width(0.76f)
+            .reverb(0.34f, kRevHall).delay(0.30f, kDlyTape).chorus(0.50f).drive(0.12f).macro(1));
+        add(B("Neon Pluck", "PLUCK", kEraSynth, "Resonant saw pluck for sequenced lines")
+            .wave(kWaveChipSaw).dyn(0.45f).env(0.0f, 0.30f, 0.0f, 0.24f)
+            .filt(0.32f, 0.46f, 0.80f).sub(0.20f).vib(0.0f).detune(0.45f).width(0.66f)
+            .reverb(0.26f, kRevHall).delay(0.38f, kDlyPing).chorus(0.30f).macro(1));
+        add(B("Midnight Sub Bass", "BASS", kEraSynth, "Round square sub bass behind a closed filter")
+            .wave(kWavePulse50).dyn(0.50f).env(0.0f, 0.36f, 0.80f, 0.14f)
+            .filt(0.26f, 0.22f, 0.32f).sub(0.80f).vib(0.0f).detune(0.25f)
+            .reverb(0.04f, kRevRoom).delay(0.0f, kDlyPing).chorus(0.0f).drive(0.18f).macro(6));
+        add(B("Machine Choir", "VOICE", kEraSynth, "Sampled-choir pad from an 80s workstation")
+            .wave(kWaveChoir).dyn(0.72f).env(0.30f, 0.50f, 0.95f, 0.50f)
+            .filt(0.80f, 0.08f, 0.10f).sub(0.10f).vib(0.18f).detune(0.66f).width(0.78f)
+            .reverb(0.52f, kRevHall).delay(0.18f, kDlyTape).chorus(0.55f).tape(0.25f).phaser(0.15f).macro(2));
+
+        // ---- Medieval ----
+        add(B("Shepherd Pan Pipes", "WINDS", kEraMedieval, "Breathy pan flute with a long hall")
+            .wave(kWaveFlute).dyn(0.78f).env(0.05f, 0.35f, 0.92f, 0.26f)
+            .filt(0.84f, 0.05f, 0.10f).sub(0.0f).vib(0.26f).noise(0.06f)
+            .reverb(0.48f, kRevHall).delay(0.10f, kDlySlap).chorus(0.0f).macro(0));
+        add(B("Bright Psaltery", "PLUCKED", kEraMedieval, "Doubled metal strings with a shimmering ring")
+            .wave(kWaveLute).dyn(0.82f).env(0.0f, 0.60f, 1.0f, 0.36f)
+            .filt(0.92f, 0.08f, 0.10f).sub(0.0f).vib(0.0f).detune(0.55f).width(0.70f)
+            .reverb(0.42f, kRevChurch).delay(0.12f, kDlySlap).chorus(0.20f).macro(0));
+        add(B("Capped Crumhorn", "WINDS", kEraMedieval, "Buzzy capped reed from a renaissance band")
+            .wave(kWaveReed).dyn(0.18f).env(0.03f, 0.20f, 0.96f, 0.10f)
+            .filt(0.62f, 0.16f, 0.10f).sub(0.30f).vib(0.06f).detune(0.25f)
+            .reverb(0.30f, kRevRoom).delay(0.0f, kDlyPing).chorus(0.0f).drive(0.12f).macro(6));
+        add(B("Abbey Choir AH", "VOICE", kEraMedieval, "Open AH choir with an octave, under a stone vault")
+            .wave(kWaveChoir).harm(kHarmOctave).dyn(0.88f).env(0.40f, 0.40f, 0.98f, 0.56f)
+            .filt(0.88f, 0.05f, 0.05f).sub(0.10f).vib(0.20f).detune(0.62f).width(0.74f)
+            .reverb(0.78f, kRevChurch).delay(0.0f, kDlyPing).chorus(0.28f).macro(0));
+        add(B("Rebec Fiddle", "STRINGS", kEraMedieval, "Solo bowed fiddle with a singing vibrato")
+            .wave(kWaveBowed).dyn(0.66f).env(0.06f, 0.30f, 0.92f, 0.18f)
+            .filt(0.86f, 0.12f, 0.12f).sub(0.05f).vib(0.44f).detune(0.30f)
+            .reverb(0.36f, kRevRoom).delay(0.0f, kDlyPing).chorus(0.10f).macro(11));
+
+        // ---- SFX + kit ----
+        add(B("Stadium Drum Kit", "DRUMS", kEraSfx, "Chip drums in a big room, with some grit")
+            .wave(kWaveDrums).dyn(0.55f).env(0.0f, 0.40f, 1.0f, 0.20f)
+            .filt(1.0f, 0.0f, 0.0f).sub(0.0f).vib(0.0f).detune(0.0f)
+            .reverb(0.36f, kRevHall).delay(0.0f, kDlyPing).chorus(0.0f).drive(0.28f).width(0.66f).macro(0));
+        add(B("Handheld Crunch Kit", "DRUMS", kEraSfx, "Lo-fi drums through a crushed pocket speaker")
+            .wave(kWaveDrums).dyn(0.50f).env(0.0f, 0.40f, 1.0f, 0.20f)
+            .filt(0.92f, 0.10f, 0.0f).sub(0.0f).vib(0.0f).detune(0.0f)
+            .reverb(0.08f, kRevRoom).delay(0.0f, kDlyPing).chorus(0.0f).crush(0.48f).speaker(0.45f).macro(7));
+        add(B("Warp Portal", "SFX", kEraSfx, "Rising phased whoosh into a cave")
+            .wave(kWavePwm).dyn(0.70f).env(0.0f, 0.70f, 0.40f, 0.50f).sweep(-24.0f, 1.20f)
+            .filt(0.80f, 0.30f, 0.20f).sub(0.0f).vib(0.30f).noise(0.20f).detune(0.60f).width(0.75f)
+            .reverb(0.45f, kRevCave).delay(0.30f, kDlyCanyon).chorus(0.20f).phaser(0.65f).macro(3));
+        add(B("Red Alert Klaxon", "SFX", kEraSfx, "Two-tone alarm: hold a key to keep it wailing")
+            .wave(kWavePulse25).harm(kHarmArpOctave).arp(4.0f).dyn(0.55f).env(0.0f, 0.30f, 1.0f, 0.12f)
+            .filt(0.84f, 0.20f, 0.0f).sub(0.0f).vib(0.20f).detune(0.30f)
+            .reverb(0.20f, kRevHall).delay(0.0f, kDlyPing).chorus(0.0f).drive(0.20f).speaker(0.30f).macro(6));
+        add(B("Bubble Pop", "SFX", kEraSfx, "Short upward blip, like a bubble bursting")
+            .wave(kWaveNesTri).dyn(0.20f).env(0.0f, 0.22f, 0.0f, 0.08f).sweep(-9.0f, 0.06f)
+            .filt(0.94f, 0.05f, 0.0f).sub(0.0f).vib(0.0f).detune(0.0f)
+            .reverb(0.16f, kRevRoom).delay(0.12f, kDly16Bit).chorus(0.0f).macro(8));
     }
 };
 

@@ -1,7 +1,7 @@
 # Alternative build for IDEs (Visual Studio "Open Folder", CLion, VS Code).
 # build.bat is the primary build and also produces the installer and zip.
 cmake_minimum_required(VERSION 3.20)
-project(PixelLABS VERSION 1.0.0 LANGUAGES CXX)
+project(PixelLABS VERSION 1.1.0 LANGUAGES CXX)
 
 if(NOT MSVC OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
     message(FATAL_ERROR "Pixel LABS builds with 64-bit MSVC on Windows.")
@@ -16,6 +16,7 @@ set(BUNDLE_DIR "${CMAKE_BINARY_DIR}/PixelLABS.vst3/Contents/x86_64-win")
 add_library(PixelLABS SHARED
     src/dsp/RetroSynthEngine.cpp
     src/gui/PixelLabsView.cpp
+    src/library/SoundLibrary.cpp
     src/plugin/PixelLabsPlugin.cpp
     src/plugin/dllmain.cpp
     src/plugin/vst3.def

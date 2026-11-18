@@ -57,11 +57,81 @@ static const ParamMeta kParamTable[kNumParams] = {
     { kParamSustainLevel, "Sustain Level",    "SusLvl",  "",  0, 0.80 },
     { kParamRelease,      "Release",          "Rel",     "",  0, 0.30 },
     { kParamFilterEnv,    "Filter Envelope",  "FiltEnv", "",  0, 0.30 },
-    { kParamDetune,       "Detune",           "Detune",  "",  0, 0.40 }
+    { kParamDetune,       "Detune",           "Detune",  "",  0, 0.40 },
+    { kParamVelSens,      "Velocity Sens",    "VelSens", "",  0, kDefaultVelSens },
+    { kParamTouch,        "Touch Curve",      "Touch",   "",   kNumTouchCurves - 1, 2.0 / 3.0 }
 };
 
 PixelLabsPlugin::PixelLabsPlugin() {
     syncPresetToAllParams(0, false);
+    for (int id : { kParamPitchBend, kParamSustain, kParamVelSens, kParamTouch }) {
+        telemetry_.params[id].store(synth_.getParameterNormalized(id), std::memory_order_relaxed);
+    }
+}
+
+void PixelLabsPlugin::notifyHostParam(int id, float value) {
+    if (!componentHandler_) return;
+    componentHandler_->beginEdit(id);
+    componentHandler_->performEdit(id, value);
+    componentHandler_->endEdit(id);
+}
+
+void PixelLabsPlugin::setCurrentFactory(int slot) {
+    const FactoryPreset& fp = factoryPreset(slot);
+    std::lock_guard<std::mutex> lock(soundMutex_);
+    current_.key = SoundKey::factory(slot);
+    current_.name = fp.name;
+    current_.category = fp.category;
+    current_.era = fp.era;
+    current_.basePreset = slot;
+    for (int i = 0; i < kNumParams; ++i) current_.ref[i] = fp.values[i];
+}
+
+void PixelLabsPlugin::applySoundValues(const float* values, int era, bool notifyHost) {
+    for (int i = 0; i < kNumParams; ++i) {
+        if (isPerformanceParam(i)) continue;
+        const float v = std::clamp(values[i], 0.0f, 1.0f);
+        synth_.setParameterNormalized(i, v);
+        telemetry_.params[i].store(v, std::memory_order_relaxed);
+        if (notifyHost) notifyHostParam(i, v);
+    }
+    synth_.setEra(era);
+}
+
+void PixelLabsPlugin::editorSetParam(int id, float value) {
+    if (id < 0 || id >= kNumParams) return;
+    value = std::clamp(value, 0.0f, 1.0f);
+    synth_.setParameterNormalized(id, value);
+    telemetry_.params[id].store(value, std::memory_order_relaxed);
+    notifyHostParam(id, value);
+}
+
+void PixelLabsPlugin::editorLoadFactory(int slot) {
+    syncPresetToAllParams(slot, true);
+}
+
+bool PixelLabsPlugin::editorLoadUser(uint32_t id) {
+    UserSound s;
+    if (!SoundLibrary::instance().getSound(id, s)) return false;
+    applySoundValues(s.values, s.era, true);
+    std::lock_guard<std::mutex> lock(soundMutex_);
+    current_.key = SoundKey::user(id);
+    current_.name = s.name;
+    current_.category = s.category;
+    current_.era = s.era;
+    current_.basePreset = s.basePreset;
+    for (int i = 0; i < kNumParams; ++i) current_.ref[i] = s.values[i];
+    return true;
+}
+
+CurrentSoundInfo PixelLabsPlugin::editorCurrentSound() {
+    std::lock_guard<std::mutex> lock(soundMutex_);
+    return current_;
+}
+
+void PixelLabsPlugin::editorSetCurrentSound(const CurrentSoundInfo& info) {
+    std::lock_guard<std::mutex> lock(soundMutex_);
+    current_ = info;
 }
 
 PixelLabsPlugin::~PixelLabsPlugin() {
@@ -78,14 +148,12 @@ void PixelLabsPlugin::syncPresetToAllParams(int presetIdx, bool notifyHost) {
     telemetry_.activeMacro.store(factoryPreset(presetIdx).defaultMacro, std::memory_order_relaxed);
 
     for (int i = 0; i < kNumParams; ++i) {
+        if (isPerformanceParam(i) && i != kParamPreset) continue; // untouched by a preset load
         float v = synth_.getParameterNormalized(i);
         telemetry_.params[i].store(v, std::memory_order_relaxed);
-        if (notifyHost && componentHandler_) {
-            componentHandler_->beginEdit(i);
-            componentHandler_->performEdit(i, v);
-            componentHandler_->endEdit(i);
-        }
+        if (notifyHost) notifyHostParam(i, v);
     }
+    setCurrentFactory(presetIdx);
 }
 
 tresult PLUGIN_API PixelLabsPlugin::queryInterface(const TUID _iid, void** obj) {
@@ -220,7 +288,14 @@ tresult PLUGIN_API PixelLabsPlugin::setState(IBStream* state) {
     uint32_t magic = 0;
     std::memcpy(&magic, raw, sizeof(magic));
 
-    if (magic == 0x50584C32 && numRead >= static_cast<int32>(sizeof(StateSnapshot))) { // 'PXL2'
+    auto restoreUi = [&](int32_t macro, int32_t theme, int32_t uiScale, int32_t tab, int32_t maxTab) {
+        telemetry_.activeMacro.store(std::clamp(macro, 0, kNumMacros - 1), std::memory_order_relaxed);
+        telemetry_.theme.store(std::clamp(theme, 0, kNumThemes - 1), std::memory_order_relaxed);
+        telemetry_.uiScale.store(std::clamp(uiScale, 0, kNumUiScales - 1), std::memory_order_relaxed);
+        telemetry_.eraTab.store(std::clamp(tab, 0, maxTab), std::memory_order_relaxed);
+    };
+
+    if (magic == 0x50584C33 && numRead >= static_cast<int32>(sizeof(StateSnapshot))) { // 'PXL3'
         StateSnapshot snap;
         std::memcpy(&snap, raw, sizeof(snap));
         const int pIdx = normToList(snap.params[kParamPreset], kNumFactoryPresets);
@@ -232,10 +307,46 @@ tresult PLUGIN_API PixelLabsPlugin::setState(IBStream* state) {
             telemetry_.params[i].store(v, std::memory_order_relaxed);
         }
         telemetry_.currentPreset.store(pIdx, std::memory_order_relaxed);
-        telemetry_.activeMacro.store(std::clamp(snap.activeMacroIndex, 0, kNumMacros - 1), std::memory_order_relaxed);
-        telemetry_.theme.store(std::clamp(snap.theme, 0, kNumThemes - 1), std::memory_order_relaxed);
-        telemetry_.uiScale.store(std::clamp(snap.uiScale, 0, kNumUiScales - 1), std::memory_order_relaxed);
-        telemetry_.eraTab.store(std::clamp(snap.eraTab, 0, static_cast<int32_t>(kNumEras)), std::memory_order_relaxed);
+        restoreUi(snap.activeMacroIndex, snap.theme, snap.uiScale, snap.eraTab, kNumBrowserTabs - 1);
+
+        CurrentSoundInfo info;
+        snap.soundName[sizeof(snap.soundName) - 1] = '\0';
+        snap.soundCategory[sizeof(snap.soundCategory) - 1] = '\0';
+        info.key.kind = std::clamp(snap.soundKind, static_cast<int32_t>(kSoundFactory), static_cast<int32_t>(kSoundDetached));
+        info.key.id = snap.soundId;
+        info.name = snap.soundName;
+        info.category = snap.soundCategory;
+        info.era = std::clamp(snap.soundEra, 0, kNumEras - 1);
+        info.basePreset = std::clamp(snap.basePreset, 0, kNumFactoryPresets - 1);
+        for (int i = 0; i < kNumParams; ++i) info.ref[i] = static_cast<float>(std::clamp(snap.refParams[i], 0.0, 1.0));
+        if (info.key.kind == kSoundFactory) {
+            info.key.id = static_cast<uint32_t>(std::min<uint32_t>(info.key.id, kNumFactoryPresets - 1));
+            if (info.name.empty()) info.name = factoryPreset(static_cast<int>(info.key.id)).name;
+        } else if (info.key.kind == kSoundUser && !SoundLibrary::instance().hasSound(info.key.id)) {
+            info.key.kind = kSoundDetached; // made on another machine, or deleted since
+        }
+        if (info.name.empty()) info.name = "UNTITLED";
+        synth_.setEra(info.era);
+        std::lock_guard<std::mutex> lock(soundMutex_);
+        current_ = info;
+        return kResultOk;
+    }
+
+    if (magic == 0x50584C32 && numRead >= static_cast<int32>(sizeof(StateSnapshotV2))) { // 'PXL2' (v2 projects)
+        StateSnapshotV2 snap;
+        std::memcpy(&snap, raw, sizeof(snap));
+        // v2 had 47 presets, so the stored list position has to be re-read with that count
+        const int pIdx = normToList(snap.params[kParamPreset], kNumFactoryPresetsV2);
+        syncPresetToAllParams(pIdx, false);
+        for (int i = 0; i < kNumParamsV2; ++i) {
+            double v = std::clamp(snap.params[i], 0.0, 1.0);
+            if (i == kParamPreset) v = listToNorm(pIdx, kNumFactoryPresets);
+            else if (i == kParamSustain) v = 0.0;
+            const float fv = static_cast<float>(v);
+            synth_.setParameterNormalized(i, fv);
+            telemetry_.params[i].store(fv, std::memory_order_relaxed);
+        }
+        restoreUi(snap.activeMacroIndex, snap.theme, snap.uiScale, snap.eraTab, kNumEras);
         return kResultOk;
     }
 
@@ -275,6 +386,16 @@ tresult PLUGIN_API PixelLabsPlugin::getState(IBStream* state) {
     snap.theme = telemetry_.theme.load(std::memory_order_relaxed);
     snap.uiScale = telemetry_.uiScale.load(std::memory_order_relaxed);
     snap.eraTab = telemetry_.eraTab.load(std::memory_order_relaxed);
+    {
+        std::lock_guard<std::mutex> lock(soundMutex_);
+        snap.soundKind = current_.key.kind;
+        snap.soundId = current_.key.id;
+        snap.soundEra = current_.era;
+        snap.basePreset = current_.basePreset;
+        std::snprintf(snap.soundName, sizeof(snap.soundName), "%s", current_.name.c_str());
+        std::snprintf(snap.soundCategory, sizeof(snap.soundCategory), "%s", current_.category.c_str());
+        for (int i = 0; i < kNumParams; ++i) snap.refParams[i] = current_.ref[i];
+    }
     int32 numWritten = 0;
     state->write(&snap, sizeof(StateSnapshot), &numWritten);
     return kResultOk;
@@ -350,6 +471,8 @@ tresult PLUGIN_API PixelLabsPlugin::process(ProcessData& data) {
                 if (e.type == Event::kNoteOnEvent) {
                     if (e.noteOn.velocity > 0.0f) {
                         synth_.noteOn(e.noteOn.pitch, e.noteOn.velocity, e.noteOn.noteId);
+                        telemetry_.lastVelocity.store(std::clamp(static_cast<int>(e.noteOn.velocity * 127.0f + 0.5f), 1, 127),
+                                                      std::memory_order_relaxed);
                     } else {
                         synth_.noteOff(e.noteOn.pitch, e.noteOn.noteId);
                     }
@@ -473,22 +596,7 @@ tresult PLUGIN_API PixelLabsPlugin::setComponentHandler(IComponentHandler* handl
 
 IPlugView* PLUGIN_API PixelLabsPlugin::createView(FIDString name) {
     if (name && std::strcmp(name, "editor") == 0) {
-        return new PixelLabsView(
-            &telemetry_,
-            [this](int paramId, float normVal) {
-                normVal = std::clamp(normVal, 0.0f, 1.0f);
-                synth_.setParameterNormalized(paramId, normVal);
-                telemetry_.params[paramId].store(normVal, std::memory_order_relaxed);
-                if (componentHandler_) {
-                    componentHandler_->beginEdit(paramId);
-                    componentHandler_->performEdit(paramId, normVal);
-                    componentHandler_->endEdit(paramId);
-                }
-            },
-            [this](int presetIdx) {
-                syncPresetToAllParams(presetIdx, true);
-            }
-        );
+        return new PixelLabsView(&telemetry_, this);
     }
     return nullptr;
 }

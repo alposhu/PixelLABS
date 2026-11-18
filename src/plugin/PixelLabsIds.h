@@ -50,10 +50,25 @@ enum ParamIds : Steinberg::Vst::ParamID {
     kParamRelease      = 32,
     kParamFilterEnv    = 33,  // Envelope -> cutoff amount
     kParamDetune       = 34,  // Oscillator 2 / unison detune
-    kNumParams         = 35
+
+    // Keyboard touch: global playing settings, never part of a saved sound
+    kParamVelSens      = 35,  // How much key velocity changes loudness and tone (0 = fixed)
+    kParamTouch        = 36,  // List: kNumTouchCurves
+    kNumParams         = 37
 };
 
 static constexpr int kNumParamsV1 = 16;
+static constexpr int kNumParamsV2 = 35;
+
+enum TouchCurves { kTouchOff = 0, kTouchLight, kTouchNormal, kTouchHeavy, kNumTouchCurves };
+static constexpr float kDefaultVelSens = 0.65f; // matches the fixed v2 velocity response
+
+// Live controller and keyboard settings: preset loads leave them alone and they never
+// count as an edit to the sound.
+inline bool isPerformanceParam(int id) {
+    return id == kParamPreset || id == kParamPitchBend || id == kParamSustain ||
+           id == kParamVelSens || id == kParamTouch;
+}
 
 enum Waveforms {
     kWavePulse50 = 0, kWavePulse25, kWavePulse12, kWaveNesTri,
@@ -82,6 +97,15 @@ static constexpr int kMacroParamIds[kNumMacros] = {
     kParamDrive, kParamCrush, kParamSpeaker, kParamWidth, kParamEnvShape, kParamVibrato
 };
 
+// Browser tabs: 0 = ALL, 1..kNumEras = eras, then the user library views
+enum BrowserTabs {
+    kTabAll = 0,
+    kTabUser = kNumEras + 1,   // MY SOUNDS
+    kTabFavorites,
+    kTabBanks,
+    kNumBrowserTabs
+};
+
 static constexpr int kNumThemes = 7;   // 0 = AUTO (follow preset era), 1..6 fixed skins
 enum Themes { kThemeAuto = 0, kThemeNes, kThemeDmg, kThemeNeon, kThemeCodex, kThemeArcade, kThemePaper };
 static constexpr int kNumUiScales = 4; // 100 / 125 / 150 / 200 %
@@ -105,14 +129,34 @@ struct StateSnapshotV1 {
     int32_t darkTheme;
 };
 
+// v2 projects: 35 parameters, 47 factory presets
+struct StateSnapshotV2 {
+    uint32_t magic;   // 'PXL2'
+    uint32_t version;
+    double params[kNumParamsV2];
+    int32_t activeMacroIndex;
+    int32_t theme;
+    int32_t uiScale;
+    int32_t eraTab;
+};
+static constexpr int kNumFactoryPresetsV2 = 47;
+
 struct StateSnapshot {
-    uint32_t magic = 0x50584C32; // 'PXL2'
-    uint32_t version = 2;
+    uint32_t magic = 0x50584C33; // 'PXL3'
+    uint32_t version = 3;
     double params[kNumParams];
     int32_t activeMacroIndex = 0;
     int32_t theme = 0;
     int32_t uiScale = 0;
     int32_t eraTab = 0;
+    // The sound that is loaded, so a project shows the same name and "edited" state
+    int32_t soundKind = 0;       // SoundKind
+    uint32_t soundId = 0;        // factory slot or user sound id
+    int32_t soundEra = 0;
+    int32_t basePreset = 0;
+    char soundName[48] = {};
+    char soundCategory[16] = {};
+    double refParams[kNumParams]; // the sound as last loaded or saved
 };
 
 // Lock-free bridge between the audio engine and the editor.
@@ -139,6 +183,7 @@ struct SharedUITelemetry {
     std::atomic<int> demoActive{0};
     std::atomic<int> demoSong{0};      // which built-in song the engine is playing
     std::atomic<float> tempoBpm{125.0f};
+    std::atomic<int> lastVelocity{0};  // raw 0..127 of the last played note (for the touch readout)
 
     float scopeSamples[256] = {0.0f};
     std::atomic<uint32_t> scopeWriteIdx{0};
