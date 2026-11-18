@@ -4,10 +4,12 @@ rem
 rem   build.bat          build plugin + installer + portable zip into dist\
 rem   build.bat test     same, then run the automated host test (renders demos + screenshots)
 rem
-rem Needs Visual Studio 2022 or newer with the "Desktop development with C++" workload.
+rem Needs Visual Studio 2022 or newer with the "Desktop development with C++" workload,
+rem and the UI art in assets\ (see README, "Build from source"). On the first build
+rem the art is baked into src\gui\UiAssets.inc, which needs Python with Pillow and fontTools.
 setlocal EnableExtensions
 
-set "VERSION=1.1.0"
+set "VERSION=1.2.0"
 rem ^ keep in sync with src\plugin\Version.h
 
 set "ROOT=%~dp0"
@@ -33,6 +35,15 @@ if not exist "%BUILD%\installer" mkdir "%BUILD%\installer"
 if not exist "%BUNDLE%\Contents\x86_64-win" mkdir "%BUNDLE%\Contents\x86_64-win"
 
 set "CXXFLAGS=/nologo /std:c++17 /O2 /EHsc /MD /W3 /DNDEBUG /DNOMINMAX /D_CRT_SECURE_NO_WARNINGS /I"%ROOT%include""
+
+rem The art packs are not in git (their licence forbids redistribution), so the
+rem tables baked from them are generated here. Delete UiAssets.inc to re-bake.
+if exist "%ROOT%src\gui\UiAssets.inc" goto have_art
+if not exist "%ROOT%assets\UI\DarkAgesUi_v1.0.zip" goto no_art
+echo [0/4] UI art
+python "%ROOT%scripts\make_ui_assets.py"
+if errorlevel 1 goto failed
+:have_art
 
 echo [1/4] Plugin
 cl.exe %CXXFLAGS% /Fo"%BUILD%\obj\\" ^
@@ -84,6 +95,11 @@ echo   %PLUGIN%
 echo   %DIST%\PixelLABS-Setup-%VERSION%.exe
 echo   %DIST%\PixelLABS-%VERSION%-win64-vst3.zip
 exit /b 0
+
+:no_art
+echo The UI art is missing: src\gui\UiAssets.inc does not exist and assets\ has no art packs.
+echo Download the free packs listed in README.md ("Build from source", "UI art") into assets\ and run again.
+exit /b 1
 
 :no_msvc
 echo Could not find the MSVC compiler. Install Visual Studio with "Desktop development with C++",

@@ -1,5 +1,5 @@
 #include "PixelLabsView.h"
-#include "PixelFont5x7.h"
+#include "UiKit.h"
 #include "../presets/FactoryPresets.h"
 #include "../plugin/ParamNames.h"
 #include "../plugin/Version.h"
@@ -19,49 +19,64 @@ static constexpr UINT_PTR kTimerId = 1001;
 // Skins
 // =============================================================================
 
+// Every skin draws the same Dark Ages art. `roles` recolours it (gold, tan, camel,
+// charcoal, blue, navy, red, green, sky, black); all zero keeps the art's own colours.
 struct Palette {
     const char* name;
     uint32_t bg, panel, inset, border, shadow;
     uint32_t ink, muted, accent, accent2, accent3;
     uint32_t keyWhite, keyWhiteShade, keyWhiteInk, keyBlack, keyBlackInk, keyHit, keyHitInk;
     uint8_t scanAlpha;
+    uint32_t roles[ui::kNumRoles];
 };
 
-static const char* kThemeNames[kNumThemes] = { "AUTO", "NES", "DMG", "NEON", "CODEX", "ARCADE", "PAPER" };
+static const char* kThemeNames[kNumThemes] = { "AUTO", "NES", "DMG", "NEON", "CODEX", "ARCADE", "PAPER", "GILDED" };
 
 static const Palette kPalettes[kNumThemes] = {
     // 0 AUTO placeholder (resolved per era)
-    { "AUTO", 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0,0,0, 0 },
-    // 1 NES - console grey, red and sky
+    { "AUTO", 0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0,0,0, 0, {} },
+    // 1 NES - console grey, red and sky, orange-gold trim
     { "NES",
       0xFF111116, 0xFF1D1D25, 0xFF0A0A0E, 0xFF3D3D4C, 0xFF050507,
       0xFFF4F4F4, 0xFF8E8EA0, 0xFFE8382F, 0xFF3CBCFC, 0xFFFCB040,
-      0xFFEDEDED, 0xFFB8B8C2, 0xFF2A2A33, 0xFF1A1A20, 0xFF9A9AAA, 0xFFE8382F, 0xFFFFFFFF, 60 },
+      0xFFEDEDED, 0xFFB8B8C2, 0xFF2A2A33, 0xFF1A1A20, 0xFF9A9AAA, 0xFFE8382F, 0xFFFFFFFF, 40,
+      { 0xFFFCB040, 0xFF8E8EA0, 0xFFC84C0C, 0xFF1D1D25, 0xFFE8382F, 0xFF0A0A0E, 0xFFE8382F, 0xFF58D854, 0xFF3CBCFC, 0xFF050507 } },
     // 2 DMG - four shades of handheld green
     { "DMG",
       0xFF0F380F, 0xFF1C4A1C, 0xFF0A2A0A, 0xFF4E7A1E, 0xFF061F06,
       0xFF9BBC0F, 0xFF6E9420, 0xFFC6E25A, 0xFF8BAC0F, 0xFFE0F08A,
-      0xFF9BBC0F, 0xFF6E9420, 0xFF0F380F, 0xFF0F380F, 0xFF8BAC0F, 0xFF306230, 0xFFC6E25A, 70 },
-    // 3 NEON - synthwave night
+      0xFF9BBC0F, 0xFF6E9420, 0xFF0F380F, 0xFF0F380F, 0xFF8BAC0F, 0xFF306230, 0xFFC6E25A, 50,
+      { 0xFFC6E25A, 0xFF6E9420, 0xFF8BAC0F, 0xFF1C4A1C, 0xFF306230, 0xFF0F380F, 0xFFC6E25A, 0xFF9BBC0F, 0xFFE0F08A, 0xFF061F06 } },
+    // 3 NEON - synthwave night, cyan trim
     { "NEON",
       0xFF0D0221, 0xFF1A0B3B, 0xFF07011A, 0xFF46207F, 0xFF04000E,
       0xFFF7EEFF, 0xFFA28BCB, 0xFFFF2E97, 0xFF00F0FF, 0xFFFFD319,
-      0xFFEDE6FF, 0xFFB7A6E0, 0xFF2A1250, 0xFF170732, 0xFFB08CFF, 0xFFFF2E97, 0xFFFFFFFF, 70 },
-    // 4 CODEX - illuminated manuscript
+      0xFFEDE6FF, 0xFFB7A6E0, 0xFF2A1250, 0xFF170732, 0xFFB08CFF, 0xFFFF2E97, 0xFFFFFFFF, 50,
+      { 0xFF00F0FF, 0xFF7A5CB0, 0xFF0090B0, 0xFF1A0B3B, 0xFFFF2E97, 0xFF07011A, 0xFFFF2E97, 0xFF00F0FF, 0xFFFFD319, 0xFF04000E } },
+    // 4 CODEX - illuminated manuscript, rubric red
     { "CODEX",
       0xFF1A120B, 0xFF2C1F13, 0xFF120C07, 0xFF6B4E2A, 0xFF0A0603,
       0xFFF3E6C8, 0xFFB0946A, 0xFFE0AE3C, 0xFFC8362B, 0xFF4F8CC4,
-      0xFFEFE1C0, 0xFFC7B48C, 0xFF3A2A16, 0xFF24170C, 0xFFC7A46A, 0xFFE0AE3C, 0xFF1A120B, 50 },
+      0xFFEFE1C0, 0xFFC7B48C, 0xFF3A2A16, 0xFF24170C, 0xFFC7A46A, 0xFFE0AE3C, 0xFF1A120B, 36,
+      { 0xFFE0AE3C, 0xFFB0946A, 0xFF9A6B2A, 0xFF2C1F13, 0xFFC8362B, 0xFF120C07, 0xFFC8362B, 0xFF6E9A3C, 0xFF4F8CC4, 0xFF0A0603 } },
     // 5 ARCADE - black cabinet, maze blue, marquee yellow
     { "ARCADE",
       0xFF000000, 0xFF0B0B18, 0xFF000000, 0xFF2626E0, 0xFF000000,
       0xFFFFFFFF, 0xFF8A8AB0, 0xFFFFE600, 0xFF00E5FF, 0xFFFF4FB0,
-      0xFFF2F2F2, 0xFFB0B0C8, 0xFF101018, 0xFF12121E, 0xFF8A8AB0, 0xFFFFE600, 0xFF000000, 80 },
-    // 6 PAPER - light studio skin
+      0xFFF2F2F2, 0xFFB0B0C8, 0xFF101018, 0xFF12121E, 0xFF8A8AB0, 0xFFFFE600, 0xFF000000, 60,
+      { 0xFFFFE600, 0xFF5A5AE8, 0xFFC0A800, 0xFF0B0B18, 0xFF2626E0, 0xFF000000, 0xFFFF4FB0, 0xFF00E5FF, 0xFF00E5FF, 0xFF000000 } },
+    // 6 PAPER - light studio skin, ink-drawn trim
     { "PAPER",
-      0xFFEAE3D2, 0xFFF8F4EA, 0xFFE1D7C2, 0xFF2B2B2B, 0xFFBDB29B,
-      0xFF1C1C1C, 0xFF6A6252, 0xFFE0502A, 0xFF2479A3, 0xFF5E8A2C,
-      0xFFFFFFFF, 0xFFD8D0BE, 0xFF1C1C1C, 0xFF222222, 0xFFBDB6A6, 0xFFE0502A, 0xFFFFFFFF, 18 }
+      0xFFEAE3D2, 0xFFF8F4EA, 0xFFE1D7C2, 0xFF6A6252, 0xFFBDB29B,
+      0xFF1C1C1C, 0xFF6A6252, 0xFFE0502A, 0xFF2479A3, 0xFFB0702A,
+      0xFFFFFFFF, 0xFFD8D0BE, 0xFF1C1C1C, 0xFF222222, 0xFFBDB6A6, 0xFFE0502A, 0xFFFFFFFF, 0,
+      { 0xFF4A3F2E, 0xFF8A7F6A, 0xFF7A5A2A, 0xFFF8F4EA, 0xFFE0502A, 0xFFE1D7C2, 0xFFE0502A, 0xFF5E8A2C, 0xFF2479A3, 0xFFBDB29B } },
+    // 7 GILDED - the Dark Ages art in its own gold, charcoal and blue
+    { "GILDED",
+      0xFF1A1D18, 0xFF2E322A, 0xFF161D1D, 0xFF706255, 0xFF080A07,
+      0xFFF3E7C4, 0xFF9F8873, 0xFFDCC47C, 0xFF6FB2DE, 0xFFFBD693,
+      0xFFE9DDBA, 0xFFC4B188, 0xFF2E322A, 0xFF161D1D, 0xFF9F8873, 0xFFDCC47C, 0xFF15202F, 24,
+      {} }
 };
 
 static const uint32_t kEraColors[kNumEras] = {
@@ -74,12 +89,17 @@ static const uint32_t kEraColors[kNumEras] = {
 
 static int autoThemeForEra(int era) {
     switch (era) {
-        case kEraChip90:   return 2;
-        case kEraSynth:    return 3;
-        case kEraMedieval: return 4;
-        case kEraSfx:      return 5;
-        default:           return 1;
+        case kEraChip90:   return kThemeDmg;
+        case kEraSynth:    return kThemeNeon;
+        case kEraMedieval: return kThemeGilded;
+        case kEraSfx:      return kThemeArcade;
+        default:           return kThemeNes;
     }
+}
+
+// A role colour as this skin draws it (the art's own colour for GILDED).
+static uint32_t roleColor(const Palette& p, int role) {
+    return p.roles[0] ? p.roles[role] : ui::kRoleBase[role];
 }
 
 // =============================================================================
@@ -140,6 +160,13 @@ static int whiteIndex(int note) {
 // Drawing helpers
 // =============================================================================
 
+// Recolour table of the skin being drawn. Rebuilt at the start of every frame
+// (editors all draw on the host's UI thread).
+static ui::Skin g_skin;
+
+static constexpr int kBarH = 19;   // height of the scroll-end bars (buttons, tabs)
+static constexpr int kFlatH = 15;  // height of the flat bars (steppers, fields)
+
 static void blendRect(PixelCanvas& c, int x, int y, int w, int h, uint32_t color, uint8_t alpha) {
     const int x0 = std::max(0, x), y0 = std::max(0, y);
     const int x1 = std::min(c.width, x + w), y1 = std::min(c.height, y + h);
@@ -152,32 +179,28 @@ static void scanlines(PixelCanvas& c, int x, int y, int w, int h, uint8_t alpha)
     for (int py = y + 1; py < y + h; py += 2) blendRect(c, x, py, w, 1, 0xFF000000, alpha);
 }
 
-static void panel(PixelCanvas& c, const Palette& p, int x, int y, int w, int h) {
-    c.fillRect(x + 3, y + 3, w, h, p.shadow);
-    c.fillPixelBox(x, y, w, h, p.panel, p.border, 2);
+// Gold knotwork window: the three main panels and every dialog.
+static void framePanel(PixelCanvas& c, int x, int y, int w, int h) {
+    blendRect(c, x + 4, y + 5, w, h, 0xFF000000, 120);
+    ui::panel9(c, g_skin, ui::kSprFrame, x, y, w, h, 24, 8);
 }
 
-static void insetBox(PixelCanvas& c, const Palette& p, int x, int y, int w, int h) {
+// Dark knotwork inset (scope, notes strip).
+static void knotPanel(PixelCanvas& c, int x, int y, int w, int h) {
+    ui::panel9(c, g_skin, ui::kSprKnotDark, x, y, w, h, 14, 4);
+}
+
+static void parchment(PixelCanvas& c, int x, int y, int w, int h) {
+    ui::panel9(c, g_skin, ui::kSprParchment, x, y, w, h, 10);
+}
+
+// Plain recessed well for lists.
+static void well(PixelCanvas& c, const Palette& p, int x, int y, int w, int h) {
     c.fillRect(x, y, w, h, p.inset);
     c.fillRect(x, y, w, 1, p.shadow);
     c.fillRect(x, y, 1, h, p.shadow);
-}
-
-// Draws text, shortening it with ".." when it is wider than maxW.
-static void textFit(PixelCanvas& c, int x, int y, int maxW, const char* text, uint32_t col, int scale = 1) {
-    char buf[96];
-    std::snprintf(buf, sizeof(buf), "%s", text ? text : "");
-    if (measurePixelText(buf, scale) > maxW) {
-        size_t n = std::strlen(buf);
-        while (n > 2) {
-            buf[n - 1] = '\0';
-            --n;
-            char tmp[100];
-            std::snprintf(tmp, sizeof(tmp), "%s..", buf);
-            if (measurePixelText(tmp, scale) <= maxW) { std::snprintf(buf, sizeof(buf), "%s", tmp); break; }
-        }
-    }
-    drawPixelText(c, x, y, buf, col, scale);
+    c.fillRect(x, y + h - 1, w, 1, p.border);
+    c.fillRect(x + w - 1, y, 1, h, p.border);
 }
 
 static void triangle(PixelCanvas& c, int cx, int cy, int size, int dir, uint32_t col) {
@@ -188,17 +211,99 @@ static void triangle(PixelCanvas& c, int cx, int cy, int size, int dir, uint32_t
     }
 }
 
-static void button(PixelCanvas& c, const Palette& p, int x, int y, int w, int h,
-                   const char* label, bool active, bool hover, int scale = 1) {
-    if (active) {
-        c.fillRect(x + 2, y + 2, w, h, p.shadow);
-        c.fillPixelBox(x, y, w, h, hover ? p.accent2 : p.accent, hover ? p.accent2 : p.accent, 2);
-    } else {
-        c.fillRect(x + 2, y + 2, w, h, p.shadow);
-        c.fillPixelBox(x, y, w, h, hover ? p.inset : p.panel, hover ? p.accent : p.border, 2);
+// Arrow with a one-pixel drop shadow so it reads on gold and on charcoal.
+static void arrow(PixelCanvas& c, const Palette& p, int cx, int cy, int size, int dir, uint32_t col) {
+    triangle(c, cx + 1, cy + 1, size, dir, p.shadow);
+    triangle(c, cx, cy, size, dir, col);
+}
+
+// Small faceted gem: era markers, LEDs.
+static void gem(PixelCanvas& c, int cx, int cy, int r, uint32_t col, uint32_t outline) {
+    for (int dy = -(r + 1); dy <= r + 1; ++dy) {
+        const int half = r + 1 - std::abs(dy);
+        c.fillRect(cx - half, cy + dy, 2 * half + 1, 1, outline);
     }
-    const int th = 7 * scale;
-    drawPixelTextCentered(c, x + w / 2, y + (h - th) / 2, label, active ? p.bg : p.ink, scale);
+    for (int dy = -r; dy <= r; ++dy) {
+        const int half = r - std::abs(dy);
+        c.fillRect(cx - half, cy + dy, 2 * half + 1, 1, col);
+    }
+    if (r >= 2) c.blendPixel(cx - 1, cy - r + 1, 0xFFFFFFFF, 150);
+}
+
+// ---- Text that stays readable on any skin's recoloured surfaces ----
+static int luma(uint32_t c) {
+    return static_cast<int>((((c >> 16) & 0xFF) * 299 + ((c >> 8) & 0xFF) * 587 + (c & 0xFF) * 114) / 1000);
+}
+static uint32_t mix(uint32_t a, uint32_t b, int t) { // t = 0..255 towards b
+    auto ch = [&](int sh) { return ((((a >> sh) & 0xFFu) * (255u - t) + ((b >> sh) & 0xFFu) * t) / 255u) << sh; };
+    return 0xFF000000u | ch(16) | ch(8) | ch(0);
+}
+// The colour a sprite shows in its middle (a button's face) in the current skin.
+static uint32_t faceColor(int id) {
+    const ui::SpriteRect& r = ui::rect(id);
+    return g_skin.lut[ui::atlas()[(r.y + r.h / 2) * ui::kAtlasW + r.x + r.w / 2]];
+}
+// The skin's ink when it reads on the face, otherwise its most contrasting colour.
+static uint32_t inkOn(const Palette& p, uint32_t face) {
+    int bestD = std::abs(luma(p.ink) - luma(face));
+    if (bestD >= 100) return p.ink;
+    uint32_t best = p.ink;
+    for (uint32_t cand : { p.keyWhite, p.shadow, p.bg, p.keyWhiteInk }) {
+        const int d = std::abs(luma(cand) - luma(face));
+        if (d > bestD) { bestD = d; best = cand; }
+    }
+    return best;
+}
+static uint32_t accentOn(const Palette& p, uint32_t face, uint32_t want) {
+    return std::abs(luma(want) - luma(face)) >= 70 ? want : inkOn(p, face);
+}
+static uint32_t mutedOn(const Palette& p, uint32_t face) { return mix(inkOn(p, face), face, 100); }
+
+// Scroll-end bar, drawn at its own height and centred in the h-tall box. Returns its face colour.
+static int barY(int y, int h) { return y + (h - kBarH) / 2; }
+static uint32_t bar(PixelCanvas& c, int x, int y, int w, int h, bool active, bool hover, bool crest = false) {
+    const int by = barY(y, h);
+    const int id = active ? ui::kSprBarGilt : (hover ? ui::kSprBarMid : ui::kSprBarDark);
+    ui::hbar(c, g_skin, id, x, by, w, 9);
+    if (active && crest) {
+        const ui::SpriteRect& r = ui::rect(ui::kSprBarGiltCrest);
+        ui::sprite(c, g_skin, ui::kSprBarGiltCrest, x + (w - r.w) / 2, by - r.h);
+    }
+    return faceColor(id);
+}
+
+static void button(PixelCanvas& c, const Palette& p, int x, int y, int w, int h,
+                   const char* label, bool active, bool hover) {
+    const uint32_t face = bar(c, x, y, w, h, active, hover);
+    const uint32_t col = (hover && !active) ? accentOn(p, face, p.accent) : inkOn(p, face);
+    ui::textCentered(c, ui::kFontTitle, x + w / 2, barY(y, h) + (kBarH - ui::capHeight(ui::kFontTitle)) / 2, label, col);
+}
+
+// Flat bar for steppers and small readouts. Returns its face colour.
+static int flatY(int y, int h) { return y + (h - kFlatH) / 2; }
+static uint32_t flat(PixelCanvas& c, int x, int y, int w, int h, bool lit = false) {
+    const int id = lit ? ui::kSprFlatMid : ui::kSprFlatDark;
+    ui::hbar(c, g_skin, id, x, flatY(y, h), w, 4);
+    return faceColor(id);
+}
+
+// Square slot: macro buttons, keycaps. state 0 idle, 1 hover, 2 selected. Returns its face colour.
+static uint32_t slot(PixelCanvas& c, int x, int y, int w, int h, int state) {
+    const int id = state == 2 ? ui::kSprSlotGilt : state == 1 ? ui::kSprSlotMid : ui::kSprSlotDark;
+    ui::panel9(c, g_skin, id, x, y, w, h, 7);
+    return faceColor(id);
+}
+
+// Thin gem bar filled to v (0..1) on a dark track.
+static void gauge(PixelCanvas& c, const Palette& p, int x, int y, int w, float v, int gemId = ui::kSprGemBlue) {
+    c.fillRect(x, y, w, 4, p.inset);
+    const int fw = static_cast<int>(std::lround(std::clamp(v, 0.0f, 1.0f) * w));
+    if (fw >= 2) ui::hbar(c, g_skin, gemId, x, y, fw, std::min(3, fw / 2));
+}
+
+static void divider(PixelCanvas& c, int cx, int y) {
+    const ui::SpriteRect& r = ui::rect(ui::kSprDividerLight);
+    ui::sprite(c, g_skin, ui::kSprDividerLight, cx - r.w / 2, y);
 }
 
 // 7x7 pixel icons, one byte per row, bit 6 = leftmost pixel
@@ -208,6 +313,7 @@ static const uint8_t kIconFolder[7] = { 0x70, 0x7F, 0x41, 0x41, 0x41, 0x41, 0x7F
 static const uint8_t kIconPencil[7] = { 0x03, 0x07, 0x0E, 0x1C, 0x38, 0x50, 0x60 };
 static const uint8_t kIconCross[7]  = { 0x41, 0x22, 0x14, 0x08, 0x14, 0x22, 0x41 };
 static const uint8_t kIconMinus[7]  = { 0x00, 0x00, 0x00, 0x7F, 0x00, 0x00, 0x00 };
+static const uint8_t kIconZoom[7]   = { 0x38, 0x44, 0x44, 0x44, 0x3C, 0x06, 0x03 };
 
 static void drawIcon(PixelCanvas& c, int x, int y, const uint8_t rows[7], uint32_t col, int scale = 1) {
     for (int r = 0; r < 7; ++r)
@@ -215,10 +321,10 @@ static void drawIcon(PixelCanvas& c, int x, int y, const uint8_t rows[7], uint32
             if (rows[r] & (1 << (6 - b))) c.fillRect(x + b * scale, y + r * scale, scale, scale, col);
 }
 
-static void dialogFrame(PixelCanvas& c, const Palette& p, int x, int y, int w, int h) {
-    c.fillRect(x + 5, y + 5, w, h, p.shadow);
-    c.fillPixelBox(x, y, w, h, p.panel, p.accent, 2);
-    c.fillRect(x + 6, y + 6, w - 12, 1, p.border);
+// Icon with a shadow pixel under every lit one.
+static void iconShadow(PixelCanvas& c, const Palette& p, int x, int y, const uint8_t rows[7], uint32_t col, int scale = 1) {
+    drawIcon(c, x + scale, y + scale, rows, p.shadow, scale);
+    drawIcon(c, x, y, rows, col, scale);
 }
 
 // SoundKeys travel through Hit::a: factory slot as is, user ids with bit 30 set
@@ -536,7 +642,7 @@ bool PixelLabsView::soundExists(const SoundKey& k) const {
 
 std::string PixelLabsView::soundName(const SoundKey& k) const {
     if (k == cur_.key) return cur_.name;
-    if (k.kind == kSoundFactory) return upper(factoryPreset(static_cast<int>(k.id)).name);
+    if (k.kind == kSoundFactory) return factoryPreset(static_cast<int>(k.id)).name;
     if (const UserSound* s = lib_.findSound(k.id)) return s->name;
     return "?";
 }
@@ -859,11 +965,12 @@ void PixelLabsView::renderUI() {
     int theme = std::clamp(telemetry_->theme.load(std::memory_order_relaxed), 0, kNumThemes - 1);
     if (theme == 0) theme = autoThemeForEra(currentEra());
     const Palette& p = kPalettes[theme];
+    ui::buildSkin(g_skin, p.roles[0] ? p.roles : nullptr);
 
+    // Woven backdrop: a faint 4-pixel stitch
     c.fillRect(0, 0, kBaseWidth, kBaseHeight, p.bg);
-    // Faint dot grid on the background
-    for (int y = 4; y < kBaseHeight; y += 8)
-        for (int x = 4; x < kBaseWidth; x += 8) c.blendPixel(x, y, p.border, 90);
+    for (int y = 1; y < kBaseHeight; y += 4)
+        for (int x = ((y / 4) & 1) * 2 + 1; x < kBaseWidth; x += 4) c.blendPixel(x, y, p.panel, 160);
 
     drawHeader(c, p);
     drawEraTabs(c, p);
@@ -876,23 +983,28 @@ void PixelLabsView::renderUI() {
 }
 
 void PixelLabsView::drawHeader(PixelCanvas& c, const Palette& p) {
-    // Logo with a hard pixel drop shadow
-    drawPixelText(c, 18, 12, "PIXEL", p.shadow, 3);
-    drawPixelText(c, 16, 10, "PIXEL", p.accent, 3);
-    const int lx = 16 + measurePixelText("PIXEL ", 3);
-    drawPixelText(c, lx + 2, 12, "LABS", p.shadow, 3);
-    drawPixelText(c, lx, 10, "LABS", p.ink, 3);
-    drawPixelText(c, 16, 38, "RETRO INSTRUMENT LAB  V" PIXELLABS_VERSION_SHORT, p.muted, 1);
+    // Logo
+    ui::textShadow(c, ui::kFontTitle, 16, 9, "PIXEL", p.accent, p.shadow, 2);
+    const int lx = 16 + ui::textWidth(ui::kFontTitle, "PIXEL ", 2);
+    ui::textShadow(c, ui::kFontTitle, lx, 9, "LABS", p.ink, p.shadow, 2);
+    ui::text(c, ui::kFontLight, 17, 36, "RETRO INSTRUMENT LAB  V" PIXELLABS_VERSION_SHORT, p.muted);
 
-    // Sound display
+    // Sound plaque: gilded blue slot with its crest
     const int bx = 236, by = 8, bw = 392, bh = 40;
-    panel(c, p, bx, by, bw, bh);
-    insetBox(c, p, bx + 32, by + 4, bw - 64, bh - 8);
+    blendRect(c, bx + 3, by + 4, bw, bh, 0xFF000000, 110);
+    ui::panel9(c, g_skin, ui::kSprSlotGilt, bx, by, bw, bh, 7);
+    {
+        const ui::SpriteRect& cr = ui::rect(ui::kSprSlotGiltCrest);
+        ui::sprite(c, g_skin, ui::kSprSlotGiltCrest, bx + (bw - cr.w) / 2, by - cr.h + 1);
+    }
     const int era = currentEra();
+    const uint32_t face = faceColor(ui::kSprSlotGilt);
+    const uint32_t plaqueInk = inkOn(p, face);
+    const uint32_t arrowCol = accentOn(p, face, roleColor(p, ui::kRoleGold));
 
     const bool hPrev = hovered(bx, by, 30, bh), hNext = hovered(bx + bw - 30, by, 30, bh);
-    triangle(c, bx + 16, by + bh / 2, 7, -1, hPrev ? p.accent : p.ink);
-    triangle(c, bx + bw - 16, by + bh / 2, 7, 1, hNext ? p.accent : p.ink);
+    arrow(c, p, bx + 16, by + bh / 2, 7, -1, hPrev ? plaqueInk : arrowCol);
+    arrow(c, p, bx + bw - 16, by + bh / 2, 7, 1, hNext ? plaqueInk : arrowCol);
     addHit(bx, by, 30, bh, kHitPresetPrev);
     addHit(bx + bw - 30, by, 30, bh, kHitPresetNext);
 
@@ -901,14 +1013,15 @@ void PixelLabsView::drawHeader(PixelCanvas& c, const Palette& p) {
         const bool canFav = cur_.key.kind != kSoundDetached;
         const bool fav = canFav && lib_.isFavorite(cur_.key);
         const bool hv = hovered(kHeaderStarX - 9, kHeaderStarY - 9, 18, 18);
-        const uint32_t col = fav ? p.accent3 : (hv && canFav ? p.accent : p.border);
-        drawIcon(c, kHeaderStarX - 7, kHeaderStarY - 7, kIconStar, col, 2);
+        const uint32_t col = fav ? accentOn(p, face, p.accent3) : (hv && canFav ? plaqueInk : mix(face, p.shadow, 110));
+        iconShadow(c, p, kHeaderStarX - 7, kHeaderStarY - 7, kIconStar, col, 2);
         addHit(kHeaderStarX - 9, kHeaderStarY - 9, 18, 18, kHitHeaderStar);
     }
 
-    const std::string& name = cur_.name;
-    const int nameScale = measurePixelText(name.c_str(), 2) <= bw - 128 ? 2 : 1;
-    drawPixelTextCentered(c, bx + bw / 2 + 8, by + (nameScale == 2 ? 9 : 12), name.c_str(), p.ink, nameScale);
+    const int nameX = bx + bw / 2 + 8;
+    ui::textFit(c, ui::kFontTitle, nameX - std::min(ui::textWidth(ui::kFontTitle, cur_.name.c_str()), bw - 120) / 2,
+                by + 8, bw - 120, cur_.name.c_str(), plaqueInk);
+    // (textFit draws from the left; centre it by its fitted width)
 
     char sub[96];
     if (cur_.key.kind == kSoundFactory)
@@ -916,45 +1029,57 @@ void PixelLabsView::drawHeader(PixelCanvas& c, const Palette& p) {
     else
         std::snprintf(sub, sizeof(sub), "%s  %s  /  %s", cur_.key.kind == kSoundUser ? "MY SOUND" : "NOT SAVED",
                       kEraNames[era], cur_.category.c_str());
-    const char* edited = modified_ ? "  EDITED" : "";
-    const int subW = measurePixelText(sub, 1) + measurePixelText(edited, 1);
-    const int sx = bx + bw / 2 + 14 - subW / 2;
-    c.fillRect(sx - 12, by + 28, 7, 7, kEraColors[era]);
-    drawPixelText(c, sx, by + 28, sub, p.muted, 1);
-    if (modified_) drawPixelText(c, sx + measurePixelText(sub, 1), by + 28, edited, p.accent, 1);
+    const char* edited = modified_ ? "   EDITED" : "";
+    const int subW = ui::textWidth(ui::kFontBody, sub) + ui::textWidth(ui::kFontBody, edited);
+    const int sx = nameX + 6 - subW / 2;
+    gem(c, sx - 10, by + 28, 3, kEraColors[era], p.shadow);
+    ui::text(c, ui::kFontBody, sx, by + 24, sub, mix(plaqueInk, face, 50));
+    if (modified_) ui::text(c, ui::kFontBody, sx + ui::textWidth(ui::kFontBody, sub), by + 24, edited, accentOn(p, face, p.accent3));
 
     // Demo button
     const bool demo = telemetry_->demoActive.load(std::memory_order_relaxed) != 0;
     {
-        const int x = 640, y = 10, w = 120, h = 34;
+        const int x = 640, y = 10, w = 104, h = 34;
         const bool hv = hovered(x, y, w, h);
-        const bool blink = demo && ((frame_ / 10) & 1);
-        button(c, p, x, y, w, h, "", demo, hv);
-        const uint32_t col = demo ? p.bg : p.ink;
+        const uint32_t f = bar(c, x, y, w, h, demo, hv);
+        const int ty = barY(y, h) + (kBarH - ui::capHeight(ui::kFontTitle)) / 2;
+        const int tw = 12 + ui::textWidth(ui::kFontTitle, "DEMO");
+        const int tx = x + (w - tw) / 2;
         if (demo) {
-            c.fillRect(x + 12, y + 12, 9, 9, blink ? p.accent2 : col);
-            drawPixelText(c, x + 28, y + 13, "STOP DEMO", col, 1);
+            const bool blink = (frame_ / 10) & 1;
+            c.fillRect(tx, ty + 1, 8, 8, blink ? accentOn(p, f, p.accent3) : inkOn(p, f));
         } else {
-            triangle(c, x + 16, y + 17, 6, 1, p.accent);
-            drawPixelText(c, x + 28, y + 13, "PLAY DEMO", col, 1);
+            arrow(c, p, tx + 3, ty + 5, 6, 1, accentOn(p, f, hv ? p.accent3 : p.accent));
         }
+        ui::text(c, ui::kFontTitle, tx + 12, ty, "DEMO", (hv && !demo) ? accentOn(p, f, p.accent) : inkOn(p, f));
         addHit(x, y, w, h, kHitDemo);
     }
     // Skin button
     {
-        const int x = 768, y = 10, w = 90, h = 34;
-        const int theme = telemetry_->theme.load(std::memory_order_relaxed);
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "SKIN %s", kThemeNames[std::clamp(theme, 0, kNumThemes - 1)]);
-        button(c, p, x, y, w, h, buf, false, hovered(x, y, w, h));
+        const int x = 752, y = 10, w = 112, h = 34;
+        const bool hv = hovered(x, y, w, h);
+        const int theme = std::clamp(telemetry_->theme.load(std::memory_order_relaxed), 0, kNumThemes - 1);
+        const uint32_t f = bar(c, x, y, w, h, false, hv);
+        const int ty = barY(y, h) + (kBarH - ui::capHeight(ui::kFontTitle)) / 2;
+        const int tw = ui::textWidth(ui::kFontTiny, "SKIN", 1) + 5 + ui::textWidth(ui::kFontTitle, kThemeNames[theme]);
+        const int tx = x + (w - tw) / 2;
+        ui::text(c, ui::kFontTiny, tx, ty + 2, "SKIN", mutedOn(p, f), 1);
+        ui::text(c, ui::kFontTitle, tx + ui::textWidth(ui::kFontTiny, "SKIN", 1) + 5, ty, kThemeNames[theme],
+                 hv ? accentOn(p, f, p.accent) : inkOn(p, f));
         addHit(x, y, w, h, kHitTheme);
     }
     // Zoom button
     {
-        const int x = 866, y = 10, w = 78, h = 34;
-        char buf[32];
-        std::snprintf(buf, sizeof(buf), "ZOOM %d%%", zoom());
-        button(c, p, x, y, w, h, buf, false, hovered(x, y, w, h));
+        const int x = 872, y = 10, w = 72, h = 34;
+        const bool hv = hovered(x, y, w, h);
+        const uint32_t f = bar(c, x, y, w, h, false, hv);
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "%d%%", zoom());
+        const int ty = barY(y, h) + (kBarH - ui::capHeight(ui::kFontTitle)) / 2;
+        const int tw = 11 + ui::textWidth(ui::kFontTitle, buf);
+        const int tx = x + (w - tw) / 2;
+        drawIcon(c, tx, ty + 2, kIconZoom, mutedOn(p, f));
+        ui::text(c, ui::kFontTitle, tx + 11, ty, buf, hv ? accentOn(p, f, p.accent) : inkOn(p, f));
         addHit(x, y, w, h, kHitZoom);
     }
 }
@@ -969,25 +1094,29 @@ void PixelLabsView::drawEraTabs(PixelCanvas& c, const Palette& p) {
         const int x = tabX(t), w = tabW(t);
         const bool active = (t == tab);
         const bool hv = hovered(x, y, w, h);
-        c.fillRect(x + 2, y + 2, w, h, p.shadow);
-        c.fillPixelBox(x, y, w, h, active ? p.accent : (hv ? p.inset : p.panel), active ? p.accent : (hv ? p.accent : p.border), 2);
-        const int tw = measurePixelText(kTabNames[t], 1);
-        const int tx = x + (w - tw) / 2 + (t > 0 ? 6 : 0);
-        if (t >= 1 && t <= kNumEras) c.fillRect(tx - 12, y + 9, 7, 7, kEraColors[t - 1]);
-        else if (t == kTabUser) drawIcon(c, tx - 12, y + 9, kIconDisk, active ? p.bg : p.accent3);
-        else if (t == kTabFavorites) drawIcon(c, tx - 12, y + 9, kIconStar, active ? p.bg : p.accent3);
-        else if (t == kTabBanks) drawIcon(c, tx - 12, y + 9, kIconFolder, active ? p.bg : p.accent3);
-        drawPixelText(c, tx, y + 9, kTabNames[t], active ? p.bg : p.ink, 1);
+        const uint32_t f = bar(c, x, y, w, h, active, hv, true);
+        const int ty = barY(y, h) + (kBarH - ui::capHeight(ui::kFontTitle)) / 2;
+        const int iconW = t == 0 ? 0 : 11;
+        const int tw = iconW + ui::textWidth(ui::kFontTitle, kTabNames[t]);
+        const int tx = x + (w - tw) / 2;
+        const uint32_t iconCol = active ? inkOn(p, f) : accentOn(p, f, p.accent);
+        if (t >= 1 && t <= kNumEras) gem(c, tx + 3, ty + 5, 3, kEraColors[t - 1], p.shadow);
+        else if (t == kTabUser) drawIcon(c, tx, ty + 1, kIconDisk, iconCol);
+        else if (t == kTabFavorites) drawIcon(c, tx, ty + 1, kIconStar, active ? inkOn(p, f) : accentOn(p, f, p.accent3));
+        else if (t == kTabBanks) drawIcon(c, tx, ty + 1, kIconFolder, iconCol);
+        ui::text(c, ui::kFontTitle, tx + iconW, ty, kTabNames[t],
+                 active ? inkOn(p, f) : (hv ? accentOn(p, f, p.accent) : mutedOn(p, f)));
         addHit(x, y, w, h, kHitEraTab, t);
     }
 }
 
 void PixelLabsView::drawPresetList(PixelCanvas& c, const Palette& p) {
     const int x = kListX, y = kListY, w = kListW, h = kListH;
-    panel(c, p, x, y, w, h);
+    framePanel(c, x, y, w, h);
     addHit(x, y, w, h, kHitPresetList);
     const int tab = browserTab();
-    insetBox(c, p, x + 6, kRowsTop - 2, w - 12, kVisibleRows * kRowH + 4);
+    well(c, p, kRowX - 3, kRowsTop - 3, kListX + kListW - 12 - (kRowX - 3), kVisibleRows * kRowH + 5);
+    const int ty = y + 15;
 
     if (tab == kTabBanks && openBankId_ == 0) {
         drawBankRows(c, p);
@@ -996,18 +1125,20 @@ void PixelLabsView::drawPresetList(PixelCanvas& c, const Palette& p) {
         char title[64];
         if (tab == kTabBanks) {
             const SoundBank* b = lib_.findBank(openBankId_);
-            const bool hv = hovered(x + 4, y + 3, w - 8, 17);
-            triangle(c, x + 13, y + 11, 5, -1, hv ? p.accent : p.ink);
+            const bool hv = hovered(x + 20, y + 10, w - 40, 18);
+            arrow(c, p, x + 28, ty + 4, 5, -1, hv ? p.accent3 : p.accent);
             std::snprintf(title, sizeof(title), "%s  %d", b ? b->name.c_str() : "", static_cast<int>(list.size()));
-            textFit(c, x + 22, y + 8, w - 32, title, hv ? p.accent : p.ink, 1);
-            addHit(x + 4, y + 3, w - 8, 17, kHitBankBack);
+            ui::textFit(c, ui::kFontTitle, x + 36, ty - 1, w - 64, title, hv ? p.accent3 : p.accent);
+            addHit(x + 20, y + 10, w - 40, 18, kHitBankBack);
         } else {
             const char* label = tab == kTabAll ? "ALL SOUNDS" : tab == kTabUser ? "MY SOUNDS"
                               : tab == kTabFavorites ? "FAVORITES" : kEraNames[tab - 1];
-            std::snprintf(title, sizeof(title), "%s  %d", label, static_cast<int>(list.size()));
-            drawPixelText(c, x + 10, y + 8, title, p.muted, 1);
+            ui::text(c, ui::kFontTitle, x + 26, ty - 1, label, p.accent);
+            char cnt[16];
+            std::snprintf(cnt, sizeof(cnt), "%d", static_cast<int>(list.size()));
+            ui::text(c, ui::kFontBody, x + 32 + ui::textWidth(ui::kFontTitle, label), ty, cnt, p.muted);
             if (static_cast<int>(list.size()) > kVisibleRows)
-                drawPixelText(c, x + w - 10 - measurePixelText("WHEEL", 1), y + 8, "WHEEL", p.border, 1);
+                ui::textRight(c, ui::kFontTiny, x + w - 26, ty + 1, "WHEEL", p.border, 1);
         }
         drawSoundRows(c, p, list, tab);
     }
@@ -1017,15 +1148,17 @@ void PixelLabsView::drawPresetList(PixelCanvas& c, const Palette& p) {
 static void drawScrollbar(PixelCanvas& c, const Palette& p, int sx, int sy, int sh, int visible, int n, int scroll) {
     const int maxScroll = std::max(0, n - visible);
     if (maxScroll <= 0) return;
-    c.fillRect(sx, sy, 3, sh, p.border);
-    const int th = std::max(12, sh * visible / n);
-    const int ty = sy + (sh - th) * scroll / maxScroll;
-    c.fillRect(sx - 1, ty, 5, th, p.accent2);
+    ui::vbar(c, g_skin, ui::kSprVBarNavy, sx - 2, sy, sh, 10);
+    const int inner = sh - 20;
+    const int th = std::max(10, inner * visible / n);
+    const int ty = sy + 10 + (inner - th) * scroll / maxScroll;
+    c.fillRect(sx, ty, 3, th, p.accent);
+    c.fillRect(sx, ty, 1, th, p.accent3);
 }
 
 static void drawHintLines(PixelCanvas& c, const Palette& p, int cx, int y, std::initializer_list<const char*> lines) {
     int ly = y;
-    for (const char* l : lines) { drawPixelTextCentered(c, cx, ly, l, p.muted, 1); ly += 12; }
+    for (const char* l : lines) { ui::textCentered(c, ui::kFontLight, cx, ly, l, p.muted); ly += 14; }
 }
 
 void PixelLabsView::drawSoundRows(PixelCanvas& c, const Palette& p, const std::vector<SoundKey>& list, int tab) {
@@ -1047,7 +1180,7 @@ void PixelLabsView::drawSoundRows(PixelCanvas& c, const Palette& p, const std::v
     listScroll_ = std::clamp(listScroll_, 0, maxScroll);
 
     if (n == 0) {
-        const int cx = kRowX + kRowW / 2, cy = kRowsTop + 90;
+        const int cx = kRowX + kRowW / 2, cy = kRowsTop + 80;
         if (tab == kTabUser) drawHintLines(c, p, cx, cy, { "NO SAVED SOUNDS YET", "", "CHANGE A SOUND, THEN", "PRESS SAVE AS BELOW" });
         else if (tab == kTabFavorites) drawHintLines(c, p, cx, cy, { "NO FAVORITES YET", "", "CLICK THE STAR NEXT", "TO ANY SOUND" });
         else if (tab == kTabBanks) drawHintLines(c, p, cx, cy, { "THIS BANK IS EMPTY", "", "LOAD A SOUND, THEN", "PRESS + BANK BELOW" });
@@ -1061,54 +1194,60 @@ void PixelLabsView::drawSoundRows(PixelCanvas& c, const Palette& p, const std::v
         const bool sel = (key == cur_.key);
         const bool hv = hovered(rx, ry, rw, rh);
         const bool user = key.kind == kSoundUser;
-        if (sel) c.fillRect(rx, ry, rw, rh, p.accent);
-        else if (hv) c.fillRect(rx, ry, rw, rh, p.panel);
-        c.fillRect(rx + 2, ry + 3, 3, rh - 6, kEraColors[soundEra(key)]);
+        uint32_t face = p.inset;
+        if (sel) { ui::hbar(c, g_skin, ui::kSprFlatGilt, rx, ry + (rh - 16) / 2, rw, 4); face = faceColor(ui::kSprFlatGilt); }
+        else if (hv) { ui::hbar(c, g_skin, ui::kSprFlatMid, rx, ry + (rh - kFlatH) / 2, rw, 4); face = faceColor(ui::kSprFlatMid); }
+        const int ty = ry + (rh - ui::capHeight(ui::kFontBody)) / 2;
+        gem(c, rx + 7, ry + rh / 2, 2, kEraColors[soundEra(key)], p.shadow);
         if (user) {
-            drawIcon(c, rx + 10, ry + 6, kIconDisk, sel ? p.bg : p.accent3);
+            drawIcon(c, rx + 13, ty, kIconDisk, accentOn(p, face, sel ? p.accent3 : p.accent));
         } else {
             char num[8];
             std::snprintf(num, sizeof(num), "%02u", key.id + 1);
-            drawPixelText(c, rx + 9, ry + 6, num, sel ? p.bg : p.muted, 1);
+            ui::text(c, ui::kFontTiny, rx + 13, ty + 1, num, sel ? accentOn(p, face, p.accent3) : mutedOn(p, face), 1);
         }
         addHit(rx, ry, rw, rh, kHitSoundRow, packKey(key));
 
         // Row tools: star always, rename / delete / remove-from-bank while hovered
         const bool fav = lib_.isFavorite(key);
         const bool starHv = hovered(rx + rw - 15, ry, 15, rh);
-        const uint32_t starCol = fav ? (sel ? p.ink : p.accent3) : (starHv ? (sel ? p.ink : p.accent) : (sel ? p.inset : p.border));
-        drawIcon(c, rx + rw - 11, ry + 6, kIconStar, starCol);
+        const uint32_t starCol = fav ? accentOn(p, face, p.accent3) : (starHv ? accentOn(p, face, p.accent) : mix(face, inkOn(p, face), 90));
+        drawIcon(c, rx + rw - 12, ty, kIconStar, starCol);
         addHit(rx + rw - 15, ry, 15, rh, kHitStar, packKey(key));
 
         int tools = 0;
         if (hv || starHv || hovered(rx + rw - 45, ry, 30, rh)) {
-            const uint32_t toolCol = sel ? p.bg : p.ink;
+            const uint32_t toolCol = inkOn(p, face);
             if (tab == kTabUser && user) {
                 const bool h1 = hovered(rx + rw - 29, ry, 14, rh), h2 = hovered(rx + rw - 43, ry, 14, rh);
-                drawIcon(c, rx + rw - 25, ry + 6, kIconCross, h1 ? p.accent2 : toolCol);
-                drawIcon(c, rx + rw - 39, ry + 6, kIconPencil, h2 ? p.accent2 : toolCol);
+                drawIcon(c, rx + rw - 26, ty, kIconCross, h1 ? accentOn(p, face, p.accent3) : toolCol);
+                drawIcon(c, rx + rw - 40, ty, kIconPencil, h2 ? accentOn(p, face, p.accent3) : toolCol);
                 addHit(rx + rw - 29, ry, 14, rh, kHitSoundDelete, static_cast<int>(key.id));
                 addHit(rx + rw - 43, ry, 14, rh, kHitSoundRename, static_cast<int>(key.id));
                 tools = 2;
             } else if (tab == kTabBanks) {
                 const bool h1 = hovered(rx + rw - 29, ry, 14, rh);
-                drawIcon(c, rx + rw - 25, ry + 6, kIconMinus, h1 ? p.accent2 : toolCol);
+                drawIcon(c, rx + rw - 26, ty, kIconMinus, h1 ? accentOn(p, face, p.accent3) : toolCol);
                 addHit(rx + rw - 29, ry, 14, rh, kHitBankRemoveItem, packKey(key));
                 tools = 1;
             }
         }
-        textFit(c, rx + 26, ry + 6, rw - 26 - 18 - tools * 14, soundName(key).c_str(), sel ? p.bg : p.ink, 1);
+        ui::textFit(c, ui::kFontBody, rx + 28, ty, rw - 28 - 17 - tools * 14, soundName(key).c_str(),
+                    (hv && !sel) ? accentOn(p, face, p.accent) : inkOn(p, face));
     }
-    drawScrollbar(c, p, kListX + kListW - 13, kRowsTop, kVisibleRows * kRowH, kVisibleRows, n, listScroll_);
+    drawScrollbar(c, p, kListX + kListW - 18, kRowsTop - 2, kVisibleRows * kRowH + 2, kVisibleRows, n, listScroll_);
 }
 
 void PixelLabsView::drawBankRows(PixelCanvas& c, const Palette& p) {
     const int x = kListX, y = kListY;
     const int nBanks = static_cast<int>(lib_.banks.size());
     const int n = nBanks + 1; // + NEW BANK
-    char title[32];
-    std::snprintf(title, sizeof(title), "BANKS  %d", nBanks);
-    drawPixelText(c, x + 10, y + 8, title, p.muted, 1);
+    ui::text(c, ui::kFontTitle, x + 26, y + 14, "BANKS", p.accent);
+    {
+        char cnt[16];
+        std::snprintf(cnt, sizeof(cnt), "%d", nBanks);
+        ui::text(c, ui::kFontBody, x + 32 + ui::textWidth(ui::kFontTitle, "BANKS"), y + 15, cnt, p.muted);
+    }
     if (lastTabSeen_ != -2) { lastTabSeen_ = -2; lastKeySeen_ = { -1, 0 }; }
     listScroll_ = std::clamp(listScroll_, 0, std::max(0, n - kVisibleRows));
 
@@ -1117,56 +1256,59 @@ void PixelLabsView::drawBankRows(PixelCanvas& c, const Palette& p) {
         const int ry = kRowsTop + r * kRowH;
         const int rx = kRowX, rw = kRowW, rh = kRowH - 1;
         const bool hv = hovered(rx, ry, rw, rh);
-        if (hv) c.fillRect(rx, ry, rw, rh, p.panel);
+        const int ty = ry + (rh - ui::capHeight(ui::kFontBody)) / 2;
+        uint32_t face = p.inset;
+        if (hv) { ui::hbar(c, g_skin, ui::kSprFlatMid, rx, ry + (rh - kFlatH) / 2, rw, 4); face = faceColor(ui::kSprFlatMid); }
         if (idx == nBanks) {
-            drawPixelText(c, rx + 9, ry + 6, "+ NEW BANK", hv ? p.accent : p.accent2, 1);
+            ui::text(c, ui::kFontBody, rx + 9, ty, "+ NEW BANK", accentOn(p, face, hv ? p.accent3 : p.accent2));
             addHit(rx, ry, rw, rh, kHitBankNew);
             continue;
         }
         const SoundBank& b = lib_.banks[idx];
-        drawIcon(c, rx + 10, ry + 6, kIconFolder, p.accent3);
+        drawIcon(c, rx + 8, ty, kIconFolder, accentOn(p, face, p.accent));
         addHit(rx, ry, rw, rh, kHitBankRow, static_cast<int>(b.id));
-        int right = rx + rw - 4;
+        int right = rx + rw - 5;
         if (hv || hovered(rx + rw - 30, ry, 30, rh)) {
             const bool h1 = hovered(rx + rw - 15, ry, 15, rh), h2 = hovered(rx + rw - 29, ry, 14, rh);
-            drawIcon(c, rx + rw - 11, ry + 6, kIconCross, h1 ? p.accent2 : p.ink);
-            drawIcon(c, rx + rw - 25, ry + 6, kIconPencil, h2 ? p.accent2 : p.ink);
+            drawIcon(c, rx + rw - 12, ty, kIconCross, h1 ? accentOn(p, face, p.accent3) : inkOn(p, face));
+            drawIcon(c, rx + rw - 26, ty, kIconPencil, h2 ? accentOn(p, face, p.accent3) : inkOn(p, face));
             addHit(rx + rw - 15, ry, 15, rh, kHitBankDelete, static_cast<int>(b.id));
             addHit(rx + rw - 29, ry, 14, rh, kHitBankRename, static_cast<int>(b.id));
             right = rx + rw - 32;
         }
         char cnt[16];
         std::snprintf(cnt, sizeof(cnt), "%d", static_cast<int>(b.items.size()));
-        const int cw = measurePixelText(cnt, 1);
-        drawPixelText(c, right - cw, ry + 6, cnt, p.muted, 1);
-        textFit(c, rx + 26, ry + 6, right - cw - 8 - (rx + 26), b.name.c_str(), p.ink, 1);
+        const int cw = ui::textWidth(ui::kFontBody, cnt);
+        ui::text(c, ui::kFontBody, right - cw, ty, cnt, mutedOn(p, face));
+        ui::textFit(c, ui::kFontBody, rx + 22, ty, right - cw - 8 - (rx + 22), b.name.c_str(), hv ? accentOn(p, face, p.accent) : inkOn(p, face));
     }
     if (nBanks == 0) {
         drawHintLines(c, p, kRowX + kRowW / 2, kRowsTop + 60,
                       { "A BANK IS YOUR OWN SET", "OF SOUNDS. MAKE AS MANY", "AS YOU LIKE AND NAME", "THEM ANYTHING." });
     }
-    drawScrollbar(c, p, kListX + kListW - 13, kRowsTop, kVisibleRows * kRowH, kVisibleRows, n, listScroll_);
+    drawScrollbar(c, p, kListX + kListW - 18, kRowsTop - 2, kVisibleRows * kRowH + 2, kVisibleRows, n, listScroll_);
 }
 
 void PixelLabsView::drawActionBar(PixelCanvas& c, const Palette& p) {
-    const int y = kActionY, h = kActionH, w = kActionW;
-    button(c, p, kSaveBtnX, y, w, h, "SAVE", modified_, hovered(kSaveBtnX, y, w, h));
-    button(c, p, kSaveAsBtnX, y, w, h, "SAVE AS", false, hovered(kSaveAsBtnX, y, w, h));
-    button(c, p, kBankBtnX, y, w, h, "+ BANK", false, hovered(kBankBtnX, y, w, h));
-    addHit(kSaveBtnX, y, w, h, kHitSave);
-    addHit(kSaveAsBtnX, y, w, h, kHitSaveAs);
-    addHit(kBankBtnX, y, w, h, kHitAddToBank);
+    const int y = kActionY, h = kActionH;
+    button(c, p, kSaveBtnX, y, kSaveBtnW, h, "SAVE", modified_, hovered(kSaveBtnX, y, kSaveBtnW, h));
+    button(c, p, kSaveAsBtnX, y, kSaveAsBtnW, h, "SAVE AS", false, hovered(kSaveAsBtnX, y, kSaveAsBtnW, h));
+    button(c, p, kBankBtnX, y, kBankBtnW, h, "+ BANK", false, hovered(kBankBtnX, y, kBankBtnW, h));
+    addHit(kSaveBtnX, y, kSaveBtnW, h, kHitSave);
+    addHit(kSaveAsBtnX, y, kSaveAsBtnW, h, kHitSaveAs);
+    addHit(kBankBtnX, y, kBankBtnW, h, kHitAddToBank);
 }
 
 void PixelLabsView::drawHero(PixelCanvas& c, const Palette& p) {
-    const int x = 266, y = 90, w = 364, h = 310;
-    panel(c, p, x, y, w, h);
+    const int x = kHeroX, y = kHeroY, w = kHeroW, h = kHeroH;
+    framePanel(c, x, y, w, h);
 
     // ---- Oscilloscope ----
-    const int sx = x + 10, sy = y + 10, sw = w - 20, sh = 62;
-    insetBox(c, p, sx, sy, sw, sh);
-    for (int gx = sx + 8; gx < sx + sw; gx += 16) c.blendPixel(gx, sy + sh / 2, p.border, 200);
-    for (int gy = sy + 6; gy < sy + sh; gy += 8) c.blendPixel(sx + sw / 2, gy, p.border, 200);
+    const int sx = x + 24, sy = y + 12, sw = w - 48, sh = 62;
+    knotPanel(c, sx, sy, sw, sh);
+    const int ix = sx + 7, iy = sy + 7, iw = sw - 14, ih = sh - 14;
+    for (int gx = ix + 8; gx < ix + iw; gx += 16) c.blendPixel(gx, iy + ih / 2, p.border, 200);
+    for (int gy = iy + 4; gy < iy + ih; gy += 8) c.blendPixel(ix + iw / 2, gy, p.border, 200);
     {
         float snap[256];
         const uint32_t wIdx = telemetry_->scopeWriteIdx.load(std::memory_order_relaxed);
@@ -1175,49 +1317,54 @@ void PixelLabsView::drawHero(PixelCanvas& c, const Palette& p) {
         for (int i = 1; i < 128; ++i) {
             if (snap[i - 1] <= 0.0f && snap[i] > 0.0f) { start = i; break; }
         }
-        int prevX = sx, prevY = sy + sh / 2;
+        int prevX = ix, prevY = iy + ih / 2;
         for (int i = 0; i < 128; ++i) {
             const float v = std::clamp(snap[start + i] * 1.6f, -1.0f, 1.0f);
-            const int px = sx + 2 + i * (sw - 4) / 127;
-            const int py = sy + sh / 2 - static_cast<int>(v * (sh / 2 - 4));
+            const int px = ix + 2 + i * (iw - 4) / 127;
+            const int py = iy + ih / 2 - static_cast<int>(v * (ih / 2 - 3));
             if (i > 0) c.drawLine(prevX, prevY, px, py, p.accent2, 2);
             prevX = px;
             prevY = py;
         }
     }
-    drawPixelText(c, sx + 6, sy + 5, "SCOPE", p.muted, 1);
+    ui::text(c, ui::kFontTiny, ix + 4, iy + 3, "SCOPE", p.muted, 1);
     {
         char buf[32];
         std::snprintf(buf, sizeof(buf), "%.0f BPM", telemetry_->tempoBpm.load(std::memory_order_relaxed));
-        drawPixelText(c, sx + sw - 6 - measurePixelText(buf, 1), sy + 5, buf, p.muted, 1);
+        ui::textRight(c, ui::kFontTiny, ix + iw - 4, iy + 3, buf, p.muted, 1);
     }
-    scanlines(c, sx, sy, sw, sh, p.scanAlpha);
+    scanlines(c, ix, iy, iw, ih, p.scanAlpha);
 
-    // ---- Big LED macro dial ----
+    // ---- Macro dial: a ring of gems around a gold bezel ----
     const int macro = std::clamp(telemetry_->activeMacro.load(std::memory_order_relaxed), 0, kNumMacros - 1);
     const int macroParam = kMacroParamIds[macro];
     const float mv = param(macroParam);
-    const int cx = x + w / 2, cy = y + 146, r = 56;
-    const bool dialHover = hovered(cx - 70, cy - 70, 140, 140) || dragKind_ == kHitBigDial;
-    c.fillCircle(cx, cy, r + 8, p.inset, 2);
-    c.drawPixelCircle(cx, cy, r + 9, dialHover ? p.accent : p.border, 2, 2);
+    const int cx = x + w / 2, cy = y + 140, r = 52;
+    const bool dialHover = hovered(cx - 66, cy - 66, 132, 132) || dragKind_ == kHitBigDial;
+    const uint32_t gold = roleColor(p, ui::kRoleGold), camel = roleColor(p, ui::kRoleCamel);
+    c.fillCircle(cx, cy, r + 10, p.inset, 1);
+    c.drawPixelCircle(cx, cy, r + 11, ui::shadeColor(camel, -40), 2, 1);
+    c.drawPixelCircle(cx, cy, r + 10, dialHover ? p.accent3 : gold, 1, 1);
     const int segs = 27;
     const int lit = static_cast<int>(std::lround(mv * (segs - 1)));
     for (int i = 0; i < segs; ++i) {
         const double ang = (225.0 - i * (270.0 / (segs - 1))) * 3.14159265358979 / 180.0;
-        const int px = cx + static_cast<int>(std::lround(std::cos(ang) * (r - 4)));
-        const int py = cy - static_cast<int>(std::lround(std::sin(ang) * (r - 4)));
+        const int px = cx + static_cast<int>(std::lround(std::cos(ang) * (r - 3)));
+        const int py = cy - static_cast<int>(std::lround(std::sin(ang) * (r - 3)));
         const bool on = (mv > 0.001f) && i <= lit;
-        if (on) blendRect(c, px - 6, py - 6, 13, 13, p.accent, 45);
-        c.fillRect(px - 3, py - 3, 7, 7, on ? (i == lit ? p.ink : p.accent) : p.border);
+        if (on) blendRect(c, px - 5, py - 5, 11, 11, p.accent, 40);
+        gem(c, px, py, 3, on ? (i == lit ? p.accent3 : p.accent) : p.panel, on ? p.shadow : p.border);
     }
-    c.drawPixelCircle(cx, cy, r - 18, p.border, 2, 2);
+    // Inner bezel
+    c.fillCircle(cx, cy, r - 15, p.panel, 1);
+    c.drawPixelCircle(cx, cy, r - 15, gold, 1, 1);
+    c.drawPixelCircle(cx, cy, r - 17, ui::shadeColor(camel, -50), 1, 1);
     char valBuf[32];
     formatParamValue(macroParam, mv, valBuf, sizeof(valBuf));
-    const int vScale = measurePixelText(valBuf, 3) <= 70 ? 3 : 2;
-    drawPixelTextCentered(c, cx, cy - (7 * vScale) / 2, valBuf, p.ink, vScale);
-    scanlines(c, cx - r - 10, cy - r - 10, 2 * r + 20, 2 * r + 20, p.scanAlpha / 3);
-    addHit(cx - 70, cy - 70, 140, 140, kHitBigDial);
+    const int vScale = ui::textWidth(ui::kFontChunky, valBuf, 2) <= 2 * (r - 22) ? 2 : 1;
+    ui::textShadow(c, ui::kFontChunky, cx - ui::textWidth(ui::kFontChunky, valBuf, vScale) / 2,
+                   cy - (ui::capHeight(ui::kFontChunky) * vScale) / 2, valBuf, p.ink, p.shadow, vScale);
+    addHit(cx - 66, cy - 66, 132, 132, kHitBigDial);
 
     char mname[48];
     if (macroParam == kParamReverb)
@@ -1226,133 +1373,133 @@ void PixelLabsView::drawHero(PixelCanvas& c, const Palette& p) {
         std::snprintf(mname, sizeof(mname), "%s / %s", kMacroNames[macro], delayTypeName(normToList(param(kParamDelayType), kNumDelayTypes)));
     else
         std::snprintf(mname, sizeof(mname), "%s", kMacroNames[macro]);
-    drawPixelTextCentered(c, cx, cy + r + 14, mname, p.accent, measurePixelText(mname, 2) <= w - 20 ? 2 : 1);
+    ui::textShadow(c, ui::kFontTitle, cx - ui::textWidth(ui::kFontTitle, mname) / 2, cy + r + 15, mname, p.accent, p.shadow);
 
     // ---- Output meters (left of the dial) ----
     auto meter = [&](int mx, float peak, const char* label) {
-        const int my = cy - 60, mh = 120, nSeg = 15;
+        const int my = cy - 58, mh = 112, nSeg = 14;
+        ui::vbar(c, g_skin, ui::kSprVBarDark, mx, my, mh, 10);
         const float db = 20.0f * std::log10(std::max(peak, 1e-5f));
         const int on = std::clamp(static_cast<int>((db + 48.0f) / 48.0f * nSeg + 0.5f), 0, nSeg);
+        const int top = my + 10, span = mh - 20;
         for (int i = 0; i < nSeg; ++i) {
-            const int segY = my + mh - (i + 1) * 8;
-            uint32_t col = p.border;
-            if (i < on) col = (i >= nSeg - 2) ? p.accent : (i >= nSeg - 5 ? p.accent3 : p.accent2);
-            c.fillRect(mx, segY, 10, 6, col);
+            const int segY = top + span - (i + 1) * span / nSeg;
+            uint32_t col = p.inset;
+            if (i < on) col = (i >= nSeg - 2) ? roleColor(p, ui::kRoleRed) : (i >= nSeg - 5 ? p.accent : p.accent2);
+            c.fillRect(mx + 2, segY + 1, 3, span / nSeg - 1, col);
         }
-        drawPixelTextCentered(c, mx + 5, my + mh + 4, label, p.muted, 1);
+        ui::textCentered(c, ui::kFontTiny, mx + 4, my + mh + 4, label, p.muted, 1);
     };
-    meter(x + 22, telemetry_->peakL.load(std::memory_order_relaxed), "L");
+    meter(x + 24, telemetry_->peakL.load(std::memory_order_relaxed), "L");
     meter(x + 38, telemetry_->peakR.load(std::memory_order_relaxed), "R");
 
-    // ---- Voice LEDs (right of the dial) ----
+    // ---- Voices, pedal and bend (right of the dial) ----
     {
-        const int vx = x + w - 52, vy = cy - 58;
+        const int vx = x + w - 62, vy = cy - 58;
         const int voices = telemetry_->activeVoices.load(std::memory_order_relaxed);
-        drawPixelText(c, vx, vy, "VOICE", p.muted, 1);
+        ui::text(c, ui::kFontTiny, vx, vy, "VOICE", p.muted, 1);
         for (int i = 0; i < 16; ++i) {
             const int col = i % 4, row = i / 4;
-            c.fillRect(vx + col * 9, vy + 12 + row * 9, 7, 7, i < voices ? p.accent2 : p.border);
+            gem(c, vx + 3 + col * 10, vy + 16 + row * 10, 2, i < voices ? p.accent2 : p.panel, i < voices ? p.shadow : p.border);
         }
         char buf[16];
         std::snprintf(buf, sizeof(buf), "%02d/16", voices);
-        drawPixelText(c, vx, vy + 50, buf, p.ink, 1);
+        ui::text(c, ui::kFontBody, vx, vy + 54, buf, p.ink);
         const bool sus = param(kParamSustain) >= 0.5f;
-        c.fillRect(vx, vy + 66, 7, 7, sus ? p.accent3 : p.border);
-        drawPixelText(c, vx + 10, vy + 66, "PEDAL", sus ? p.ink : p.muted, 1);
+        gem(c, vx + 3, vy + 74, 3, sus ? p.accent3 : p.panel, sus ? p.shadow : p.border);
+        ui::text(c, ui::kFontTiny, vx + 10, vy + 71, "PEDAL", sus ? p.ink : p.muted, 1);
         const float bend = (param(kParamPitchBend) - 0.5f) * 4.0f;
-        c.fillRect(vx, vy + 82, 40, 3, p.border);
-        c.fillRect(vx + 19 + static_cast<int>(bend * 9.0f), vy + 80, 3, 7, p.accent);
-        drawPixelText(c, vx, vy + 92, "BEND", p.muted, 1);
+        ui::hbar(c, g_skin, ui::kSprHBarNavy, vx - 2, vy + 86, 46, 10);
+        c.fillRect(vx + 20 + static_cast<int>(bend * 9.0f), vy + 84, 3, 11, p.accent3);
+        ui::text(c, ui::kFontTiny, vx, vy + 98, "BEND", p.muted, 1);
     }
 
     // ---- 12 macro buttons ----
-    const int bw = 56, bh = 30, gap = 4;
+    const int bw = 54, bh = 30, gap = 4;
     const int bx0 = x + (w - (6 * bw + 5 * gap)) / 2;
     for (int m = 0; m < kNumMacros; ++m) {
         const int bx = bx0 + (m % 6) * (bw + gap);
-        const int by = y + 232 + (m / 6) * (bh + gap);
+        const int by = y + 226 + (m / 6) * (bh + gap);
         const bool sel = (m == macro);
         const bool hv = hovered(bx, by, bw, bh);
-        c.fillRect(bx + 2, by + 2, bw, bh, p.shadow);
-        c.fillPixelBox(bx, by, bw, bh, sel ? p.accent : (hv ? p.inset : p.panel), sel ? p.accent : (hv ? p.accent : p.border), 2);
-        drawPixelTextCentered(c, bx + bw / 2, by + 7, kMacroShort[m], sel ? p.bg : p.ink, 1);
-        const float v = param(kMacroParamIds[m]);
-        c.fillRect(bx + 6, by + 20, bw - 12, 4, sel ? p.bg : p.inset);
-        c.fillRect(bx + 6, by + 20, static_cast<int>((bw - 12) * v), 4, sel ? p.ink : p.accent2);
+        const uint32_t f = slot(c, bx, by, bw, bh, sel ? 2 : (hv ? 1 : 0));
+        ui::textCentered(c, ui::kFontChunky, bx + bw / 2, by + 6, kMacroShort[m], (hv && !sel) ? accentOn(p, f, p.accent) : inkOn(p, f));
+        gauge(c, p, bx + 7, by + 20, bw - 14, param(kMacroParamIds[m]), sel ? ui::kSprGemRed : ui::kSprGemBlue);
         addHit(bx, by, bw, bh, kHitMacroBtn, m);
     }
 }
 
 void PixelLabsView::drawSoundPanel(PixelCanvas& c, const Palette& p) {
-    const int x = 640, y = 90, w = 304, h = 310;
-    panel(c, p, x, y, w, h);
-    drawPixelText(c, x + 10, y + 8, "SOUND", p.muted, 1);
-    {
-        const char* hint = "DBL-CLICK = RESET";
-        drawPixelText(c, x + w - 10 - measurePixelText(hint, 1), y + 8, hint, p.border, 1);
-    }
+    const int x = kSoundX, y = kSoundY, w = kSoundW, h = kSoundH;
+    framePanel(c, x, y, w, h);
+    ui::text(c, ui::kFontTitle, x + 26, y + 14, "SOUND", p.accent);
+    ui::textRight(c, ui::kFontTiny, x + w - 26, y + 16, "DBL-CLICK = RESET", p.border, 1);
 
     // List steppers
     for (int i = 0; i < 4; ++i) {
         const StepperDef& s = kSteppers[i];
-        const int ry = y + 22 + i * 22;
-        drawPixelText(c, x + 10, ry + 6, s.label, p.muted, 1);
-        const int bx = x + 50, bw = w - 60, bh = 18;
-        insetBox(c, p, bx, ry, bw, bh);
-        const bool hp = hovered(bx, ry, 20, bh), hn = hovered(bx + bw - 20, ry, 20, bh);
-        triangle(c, bx + 10, ry + 9, 5, -1, hp ? p.accent : p.ink);
-        triangle(c, bx + bw - 10, ry + 9, 5, 1, hn ? p.accent : p.ink);
+        const int ry = y + 30 + i * 21, rh = 19;
+        ui::text(c, ui::kFontBody, x + 16, ry + (rh - ui::capHeight(ui::kFontBody)) / 2, s.label, p.muted);
+        const int bx = x + 58, bw = w - 74;
+        const bool hp = hovered(bx, ry, bw / 2, rh), hn = hovered(bx + bw / 2, ry, bw - bw / 2, rh);
+        const uint32_t f = flat(c, bx, ry, bw, rh, hp || hn);
+        arrow(c, p, bx + 10, ry + rh / 2, 5, -1, accentOn(p, f, hp ? p.accent3 : p.accent));
+        arrow(c, p, bx + bw - 10, ry + rh / 2, 5, 1, accentOn(p, f, hn ? p.accent3 : p.accent));
         char buf[48];
         formatParamValue(s.param, param(s.param), buf, sizeof(buf));
         const int idx = normToList(param(s.param), s.count);
-        char full[64];
-        std::snprintf(full, sizeof(full), "%s", buf);
-        drawPixelTextCentered(c, bx + bw / 2, ry + 6, full, p.ink, 1);
+        const int ty = ry + (rh - ui::capHeight(ui::kFontBody)) / 2;
+        ui::textCentered(c, ui::kFontBody, bx + bw / 2 + 8, ty, buf, inkOn(p, f));
         char cnt[16];
         std::snprintf(cnt, sizeof(cnt), "%d/%d", idx + 1, s.count);
-        drawPixelText(c, bx + 24, ry + 6, cnt, p.border, 1);
-        addHit(bx, ry, bw / 2, bh, kHitStepPrev, s.param);
-        addHit(bx + bw / 2, ry, bw - bw / 2, bh, kHitStepNext, s.param);
+        ui::text(c, ui::kFontTiny, bx + 20, ty + 1, cnt, mutedOn(p, f), 1);
+        addHit(bx, ry, bw / 2, rh, kHitStepPrev, s.param);
+        addHit(bx + bw / 2, ry, bw - bw / 2, rh, kHitStepNext, s.param);
     }
 
     // 16 sliders in two columns
     for (int i = 0; i < 16; ++i) {
         const SliderDef& s = kSliders[i];
         const int col = i / 8, row = i % 8;
-        const int sx = x + 10 + col * 146, sy = y + 114 + row * 24, sw = 138;
+        const int sx = x + 16 + col * 142, sy = y + 118 + row * 21, sw = 130;
         const float v = param(s.param);
         const bool active = (dragKind_ == kHitSlider && dragParam_ == s.param);
-        const bool hv = hovered(sx, sy, sw, 20) || active;
-        drawPixelText(c, sx, sy, s.label, hv ? p.ink : p.muted, 1);
+        const bool hv = hovered(sx, sy - 2, sw, 21) || active;
+        ui::text(c, ui::kFontBody, sx, sy, s.label, hv ? p.ink : p.muted);
         char buf[32];
         formatParamValue(s.param, v, buf, sizeof(buf));
-        drawPixelText(c, sx + sw - measurePixelText(buf, 1), sy, buf, hv ? p.accent : p.ink, 1);
-        const int by = sy + 10, bh = 8;
-        insetBox(c, p, sx, by, sw, bh);
+        ui::textRight(c, ui::kFontBody, sx + sw, sy, buf, hv ? p.accent3 : p.ink);
+        const int by = sy + 11;
+        ui::hbar(c, g_skin, ui::kSprHBarDark, sx, by, sw, 10);
+        const int tx0 = sx + 9, tw = sw - 18; // channel between the gold points
         const bool bipolar = (s.param == kParamSweep);
+        const uint32_t fillCol = hv ? p.accent3 : p.accent;
         if (bipolar) {
-            const int mid = sx + sw / 2;
-            const int px = sx + static_cast<int>((sw - 1) * v);
-            c.fillRect(std::min(mid, px), by + 1, std::abs(px - mid) + 1, bh - 2, p.accent2);
-            c.fillRect(mid, by - 1, 1, bh + 2, p.muted);
+            const int mid = tx0 + tw / 2;
+            const int px = tx0 + static_cast<int>((tw - 1) * v);
+            c.fillRect(std::min(mid, px), by + 2, std::abs(px - mid) + 1, 3, fillCol);
+            c.fillRect(mid, by, 1, 7, p.muted);
         } else {
-            // Segmented pixel fill
-            const int fill = static_cast<int>((sw - 2) * v);
-            for (int fx = 0; fx < fill; fx += 4) c.fillRect(sx + 1 + fx, by + 1, std::min(3, fill - fx), bh - 2, hv ? p.accent : p.accent2);
+            const int fill = static_cast<int>((tw - 1) * v);
+            if (fill > 0) {
+                c.fillRect(tx0, by + 2, fill, 3, fillCol);
+                c.fillRect(tx0, by + 2, fill, 1, ui::shadeColor(fillCol, 60));
+            }
         }
         // Stored-sound reference tick
-        const int rx = sx + static_cast<int>((sw - 1) * cur_.ref[s.param]);
-        c.fillRect(rx, by + bh, 1, 2, p.muted);
-        // Handle
-        const int hx = sx + static_cast<int>((sw - 3) * v);
-        c.fillRect(hx, by - 2, 3, bh + 4, p.ink);
-        addHit(sx, sy - 2, sw, 22, kHitSlider, s.param);
+        const int rx = tx0 + static_cast<int>((tw - 1) * cur_.ref[s.param]);
+        c.fillRect(rx, by + 7, 1, 2, p.muted);
+        // Jewel handle
+        const int hx = tx0 + static_cast<int>((tw - 1) * v);
+        const ui::SpriteRect& rr = ui::rect(ui::kSprRuneGold0);
+        ui::sprite(c, g_skin, (hv ? ui::kSprRuneGold0 : ui::kSprRuneGold3), hx - rr.w / 2, by + 3 - rr.h / 2);
+        addHit(tx0, sy - 2, tw, 21, kHitSlider, s.param); // the channel, so a click lands where the handle goes
     }
 }
 
 void PixelLabsView::drawStatusStrip(PixelCanvas& c, const Palette& p) {
-    const int x = 16, y = 408, w = 928, h = 30;
-    panel(c, p, x, y, w, h);
+    const int x = 16, y = kStripY, w = 928, h = 30;
+    knotPanel(c, x, y, w, h);
 
     const uint64_t lo = telemetry_->activeNotesLow.load(std::memory_order_relaxed);
     const uint64_t hi = telemetry_->activeNotesHigh.load(std::memory_order_relaxed);
@@ -1423,37 +1570,43 @@ void PixelLabsView::drawStatusStrip(PixelCanvas& c, const Palette& p) {
             std::snprintf(info, sizeof(info), "TAKE OUT OF THIS BANK");
         } else if (hh->kind == kHitBankBack) {
             std::snprintf(info, sizeof(info), "BACK TO ALL BANKS");
+        } else if (hh->kind == kHitTheme) {
+            std::snprintf(info, sizeof(info), "SKIN: CLICK FOR THE NEXT ONE  (AUTO FOLLOWS THE SOUND'S ERA)");
+        } else if (hh->kind == kHitZoom) {
+            std::snprintf(info, sizeof(info), "WINDOW SIZE");
         }
     }
 
-    drawPixelText(c, x + 10, y + 12, "NOTES", p.muted, 1);
-    int tx = x + 50;
+    const int textY = y + (h - ui::capHeight(ui::kFontBody)) / 2;
+    ui::text(c, ui::kFontTiny, x + 14, y + 12, "NOTES", p.border, 1);
+    int tx = x + 54;
     if (count == 0) {
         if (toastFrames_ > 0) {
-            const int tw = std::min(measurePixelText(toast_.c_str(), 1) + 12, notesRight - tx);
-            c.fillPixelBox(tx - 4, y + 6, tw, 18, p.accent3, p.accent3, 2);
-            textFit(c, tx + 2, y + 12, tw - 10, toast_.c_str(), p.bg, 1);
+            const int tw = std::min(ui::textWidth(ui::kFontBody, toast_.c_str()) + 20, notesRight - tx);
+            ui::hbar(c, g_skin, ui::kSprFlatGilt, tx - 6, y + 7, tw, 4);
+            ui::textFit(c, ui::kFontBody, tx + 4, textY, tw - 16, toast_.c_str(), inkOn(p, faceColor(ui::kSprFlatGilt)));
         } else if (info[0]) {
-            textFit(c, tx, y + 12, notesRight - tx, info, p.accent2, 1);
+            ui::textFit(c, ui::kFontBody, tx, textY, notesRight - tx, info, p.accent2);
         } else {
             std::string desc;
             if (cur_.key.kind == kSoundFactory) desc = factoryPreset(static_cast<int>(cur_.key.id)).description;
             else if (cur_.key.kind == kSoundUser) desc = "YOUR SOUND, MADE FROM " + upper(factoryPreset(cur_.basePreset).name);
             else desc = "NOT IN YOUR LIBRARY - PRESS SAVE AS TO KEEP IT";
-            textFit(c, tx, y + 12, notesRight - tx, desc.c_str(), p.border, 1);
+            ui::textFit(c, ui::kFontLight, tx, y + (h - ui::capHeight(ui::kFontLight)) / 2, notesRight - tx, desc.c_str(), p.muted);
         }
     } else {
+        const int noteY = y + (h - ui::capHeight(ui::kFontTitle)) / 2;
         for (int i = 0; i < count && i < 8 && tx < notesRight - 60; ++i) {
             char nb[16];
             if (drums) std::snprintf(nb, sizeof(nb), "%s", kDrumNames[notes[i] % 12]);
             else std::snprintf(nb, sizeof(nb), "%s%d", noteName(notes[i]), noteOctave(notes[i]));
-            drawPixelText(c, tx, y + 8, nb, p.ink, 2);
-            tx += measurePixelText(nb, 2) + 10;
+            ui::textShadow(c, ui::kFontTitle, tx, noteY, nb, p.ink, p.shadow);
+            tx += ui::textWidth(ui::kFontTitle, nb) + 10;
         }
         if (total > 8) {
             char more[8];
             std::snprintf(more, sizeof(more), "+%d", total - 8);
-            drawPixelText(c, tx, y + 12, more, p.muted, 1);
+            ui::text(c, ui::kFontBody, tx, textY, more, p.muted);
             tx += 24;
         }
         // Chord name
@@ -1477,14 +1630,15 @@ void PixelLabsView::drawStatusStrip(PixelCanvas& c, const Palette& p) {
             if (found) {
                 char cb[24];
                 std::snprintf(cb, sizeof(cb), "%s %s", noteName(rootPc), found);
-                c.fillPixelBox(tx + 4, y + 5, measurePixelText(cb, 2) + 12, 20, p.accent, p.accent, 2);
-                drawPixelText(c, tx + 10, y + 8, cb, p.bg, 2);
-                tx += measurePixelText(cb, 2) + 20;
+                const int cw = ui::textWidth(ui::kFontTitle, cb) + 20;
+                ui::hbar(c, g_skin, ui::kSprFlatGilt, tx + 2, y + 7, cw, 4);
+                ui::text(c, ui::kFontTitle, tx + 12, noteY, cb, inkOn(p, faceColor(ui::kSprFlatGilt)));
+                tx += cw + 10;
             }
         }
         if (info[0]) {
-            const int iw = measurePixelText(info, 1);
-            if (notesRight - iw > tx + 8) drawPixelText(c, notesRight - iw, y + 12, info, p.accent2, 1);
+            const int iw = ui::textWidth(ui::kFontBody, info);
+            if (notesRight - iw > tx + 8) ui::text(c, ui::kFontBody, notesRight - iw, textY, info, p.accent2);
         }
     }
 
@@ -1492,39 +1646,41 @@ void PixelLabsView::drawStatusStrip(PixelCanvas& c, const Palette& p) {
     {
         const int ty = y + 6, th = 18;
         const int touch = normToList(param(kParamTouch), kNumTouchCurves);
-        insetBox(c, p, kTouchX, ty, kTouchW, th);
         const bool hp = hovered(kTouchX, ty, kTouchW / 2, th), hn = hovered(kTouchX + kTouchW / 2, ty, kTouchW - kTouchW / 2, th);
-        triangle(c, kTouchX + 9, ty + 9, 5, -1, hp ? p.accent : p.ink);
-        triangle(c, kTouchX + kTouchW - 9, ty + 9, 5, 1, hn ? p.accent : p.ink);
+        const uint32_t f = flat(c, kTouchX, ty, kTouchW, th, hp || hn);
+        arrow(c, p, kTouchX + 9, ty + th / 2, 5, -1, accentOn(p, f, hp ? p.accent3 : p.accent));
+        arrow(c, p, kTouchX + kTouchW - 9, ty + th / 2, 5, 1, accentOn(p, f, hn ? p.accent3 : p.accent));
         char buf[32];
         std::snprintf(buf, sizeof(buf), "TOUCH %s", kTouchShort[touch]);
-        drawPixelTextCentered(c, kTouchX + kTouchW / 2, ty + 6, buf, p.ink, 1);
+        ui::textCentered(c, ui::kFontBody, kTouchX + kTouchW / 2, ty + (th - ui::capHeight(ui::kFontBody)) / 2, buf, inkOn(p, f));
         addHit(kTouchX, ty, kTouchW / 2, th, kHitTouchPrev);
         addHit(kTouchX + kTouchW / 2, ty, kTouchW - kTouchW / 2, th, kHitTouchNext);
 
         const float vs = param(kParamVelSens);
         const bool off = touch == kTouchOff;
         const bool hv = hovered(kVelX, ty, kVelW, th) || (dragKind_ == kHitSlider && dragParam_ == kParamVelSens);
-        insetBox(c, p, kVelX, ty, kVelW, th);
-        const int fill = static_cast<int>((kVelW - 4) * vs);
-        for (int fx = 0; fx < fill; fx += 4) c.fillRect(kVelX + 2 + fx, ty + th - 5, std::min(3, fill - fx), 3, off ? p.border : (hv ? p.accent : p.accent2));
+        const uint32_t vf = flat(c, kVelX, ty, kVelW, th, hv);
+        const int fy = flatY(ty, th);
+        const int fill = static_cast<int>((kVelW - 8) * vs);
+        if (fill > 0) blendRect(c, kVelX + 4, fy + 3, fill, kFlatH - 6, off ? p.border : p.accent2, hv ? 110 : 80);
         std::snprintf(buf, sizeof(buf), "VEL SENS %.0f%%", vs * 100.0f);
-        drawPixelTextCentered(c, kVelX + kVelW / 2, ty + 4, buf, off ? p.muted : (hv ? p.accent : p.ink), 1);
+        ui::textCentered(c, ui::kFontBody, kVelX + kVelW / 2, ty + (th - ui::capHeight(ui::kFontBody)) / 2, buf,
+                         off ? mutedOn(p, vf) : (hv ? accentOn(p, vf, p.accent3) : inkOn(p, vf)));
         addHit(kVelX, ty, kVelW, th, kHitSlider, kParamVelSens);
     }
 
     // Computer keyboard octave control
     {
-        const int ox = x + w - 170;
+        const int ox = x + w - 182, oy = y + 6, ow = 168, oh = 18;
         char buf[32];
         std::snprintf(buf, sizeof(buf), "PC KEYS A=C%d", kbdOctave_);
-        const bool hd = hovered(ox, y + 6, 18, 18), hu = hovered(ox + 150, y + 6, 18, 18);
-        insetBox(c, p, ox, y + 6, 168, 18);
-        triangle(c, ox + 9, y + 15, 5, -1, hd ? p.accent : p.ink);
-        triangle(c, ox + 159, y + 15, 5, 1, hu ? p.accent : p.ink);
-        drawPixelTextCentered(c, ox + 84, y + 12, buf, p.ink, 1);
-        addHit(ox, y + 6, 22, 18, kHitOctDown);
-        addHit(ox + 146, y + 6, 22, 18, kHitOctUp);
+        const bool hd = hovered(ox, oy, 22, oh), hu = hovered(ox + ow - 22, oy, 22, oh);
+        const uint32_t f = flat(c, ox, oy, ow, oh, hd || hu);
+        arrow(c, p, ox + 9, oy + oh / 2, 5, -1, accentOn(p, f, hd ? p.accent3 : p.accent));
+        arrow(c, p, ox + ow - 9, oy + oh / 2, 5, 1, accentOn(p, f, hu ? p.accent3 : p.accent));
+        ui::textCentered(c, ui::kFontBody, ox + ow / 2, oy + (oh - ui::capHeight(ui::kFontBody)) / 2, buf, inkOn(p, f));
+        addHit(ox, oy, 22, oh, kHitOctDown);
+        addHit(ox + ow - 22, oy, 22, oh, kHitOctUp);
     }
 }
 
@@ -1535,8 +1691,12 @@ void PixelLabsView::drawKeyboard(PixelCanvas& c, const Palette& p) {
     const int whiteH = bottom - top;
     const int blackH = 88, blackW = 16;
 
-    c.fillRect(left - 4, top - 4, nWhite * ww + 8, whiteH + 8, p.shadow);
-    c.fillRect(left - 4, top - 4, nWhite * ww + 8, 4, p.border);
+    // Knotwork rail along the top (the window frame's band)
+    {
+        const ui::SpriteRect& fr = ui::rect(ui::kSprFrame);
+        c.fillRect(left - 4, top - 2, nWhite * ww + 8, whiteH + 6, p.shadow);
+        ui::tileH(c, g_skin, fr.x + 24, fr.y + 2, 8, 8, left - 4, top - 9, nWhite * ww + 8);
+    }
 
     const uint64_t lo = telemetry_->activeNotesLow.load(std::memory_order_relaxed);
     const uint64_t hi = telemetry_->activeNotesHigh.load(std::memory_order_relaxed);
@@ -1555,21 +1715,23 @@ void PixelLabsView::drawKeyboard(PixelCanvas& c, const Palette& p) {
         const uint32_t body = on ? p.keyHit : p.keyWhite;
         c.fillRect(kx, top, ww - 2, whiteH, body);
         if (!on) {
+            c.fillRect(kx, top, ww - 2, 2, p.keyWhiteShade);              // shade under the rail
             c.fillRect(kx, bottom - 6, ww - 2, 6, p.keyWhiteShade);
-            if (n == hoverKey) blendRect(c, kx, top, ww - 2, whiteH - 6, p.accent, 50);
+            c.fillRect(kx + ww - 3, top, 1, whiteH - 6, ui::shadeColor(p.keyWhite, -12));
+            if (n == hoverKey) blendRect(c, kx, top, ww - 2, whiteH - 6, p.accent, 60);
         } else {
             c.fillRect(kx, top, ww - 2, 3, p.keyHitInk);
         }
         const uint32_t ink = on ? p.keyHitInk : p.keyWhiteInk;
         // Letter name on every white key, octave number on C
         char letter[2] = { noteName(n)[0], 0 };
-        drawPixelTextCentered(c, kx + (ww - 2) / 2, bottom - 24, letter, ink, 2);
+        ui::textCentered(c, ui::kFontTitle, kx + (ww - 2) / 2, bottom - 22, letter, ink);
         if (n % 12 == 0) {
             char oct[4];
             std::snprintf(oct, sizeof(oct), "%d", noteOctave(n));
-            drawPixelTextCentered(c, kx + (ww - 2) / 2, bottom - 36, oct, on ? ink : p.accent, 1);
+            ui::textCentered(c, ui::kFontTiny, kx + (ww - 2) / 2, bottom - 34, oct, on ? ink : p.accent, 1);
         }
-        if (drums) drawPixelTextCentered(c, kx + (ww - 2) / 2, top + blackH + 8, kDrumKeyLabels[n % 12], on ? ink : p.muted, 1);
+        if (drums) ui::textCentered(c, ui::kFontTiny, kx + (ww - 2) / 2, top + blackH + 8, kDrumKeyLabels[n % 12], on ? ink : p.muted, 1);
         // PC-keyboard range marker
         if (n >= pcBase && n <= pcBase + 16) c.fillRect(kx + 4, bottom - 4, ww - 10, 2, p.accent2);
     }
@@ -1584,10 +1746,11 @@ void PixelLabsView::drawKeyboard(PixelCanvas& c, const Palette& p) {
         if (!on) {
             c.fillRect(kx + 2, top, 2, blackH - 6, p.border);
             c.fillRect(kx, top + blackH - 6, blackW, 6, p.inset);
+            c.fillRect(kx + 1, top + blackH - 6, blackW - 2, 1, roleColor(p, ui::kRoleCamel));
             if (n == hoverKey) blendRect(c, kx, top, blackW, blackH, p.accent, 70);
         }
         const char* label = drums ? kDrumKeyLabels[n % 12] : noteName(n);
-        drawPixelTextCentered(c, kx + blackW / 2, top + blackH - 18, label, on ? p.keyHitInk : p.keyBlackInk, 1);
+        ui::textCentered(c, ui::kFontTiny, kx + blackW / 2, top + blackH - 18, label, on ? p.keyHitInk : p.keyBlackInk, 1);
     }
 }
 
@@ -1623,25 +1786,30 @@ static const char* dialogButtonLabel(int b) {
 
 void PixelLabsView::drawNameDialog(PixelCanvas& c, const Palette& p) {
     const int x = kNameDlgX, y = kNameDlgY, w = kNameDlgW, h = kNameDlgH;
-    dialogFrame(c, p, x, y, w, h);
-    drawPixelText(c, x + 20, y + 16, modal_.title.c_str(), p.accent, 2);
-    textFit(c, x + 20, y + 38, w - 40, modal_.subtitle.c_str(), p.muted, 1);
+    framePanel(c, x, y, w, h);
+    ui::textShadow(c, ui::kFontTitle, x + 26, y + 16, modal_.title.c_str(), p.accent, p.shadow, 1);
+    ui::textFit(c, ui::kFontLight, x + 26 + ui::textWidth(ui::kFontTitle, modal_.title.c_str()) + 10, y + 16,
+                w - 60 - ui::textWidth(ui::kFontTitle, modal_.title.c_str()), modal_.subtitle.c_str(), p.muted);
 
-    // Text field with a blinking block cursor
+    // Text field on parchment, with a blinking block cursor
+    const uint32_t inkOnParch = roleColor(p, ui::kRoleNavy);
+    const uint32_t faintOnParch = ui::shadeColor(roleColor(p, ui::kRoleCamel), -10);
     const std::string& t = modal_.text;
-    insetBox(c, p, x + 20, y + 54, w - 40, 32);
-    if (t.empty()) drawPixelText(c, x + 30, y + 63, "TYPE A NAME", p.border, 2);
-    else drawPixelText(c, x + 30, y + 63, t.c_str(), p.ink, 2);
-    const int cx = x + 30 + (t.empty() ? 0 : measurePixelText(t.c_str(), 2) + 3);
-    if ((frame_ / 8) & 1) c.fillRect(cx, y + 61, 10, 17, p.accent);
+    const int fx = x + 20, fy = y + 36, fw = w - 40, fh = 44;
+    parchment(c, fx, fy, fw, fh);
+    const int ty = fy + (fh - 2 * ui::capHeight(ui::kFontBody)) / 2;
+    if (t.empty()) ui::text(c, ui::kFontBody, fx + 14, ty, "TYPE A NAME", faintOnParch, 2);
+    else ui::text(c, ui::kFontBody, fx + 14, ty, t.c_str(), inkOnParch, 2);
+    const int cx = fx + 14 + (t.empty() ? 0 : ui::textWidth(ui::kFontBody, t.c_str(), 2) + 3);
+    if ((frame_ / 8) & 1) c.fillRect(cx, ty - 1, 10, 2 * ui::capHeight(ui::kFontBody) + 2, inkOnParch);
     char cnt[16];
     std::snprintf(cnt, sizeof(cnt), "%d/%d", static_cast<int>(t.size()), static_cast<int>(SoundLibrary::kMaxNameLen));
-    drawPixelText(c, x + w - 28 - measurePixelText(cnt, 1), y + 79 - 7, cnt, p.border, 1);
+    ui::textRight(c, ui::kFontTiny, fx + fw - 12, fy + fh - 13, cnt, faintOnParch, 1);
 
     // What will actually happen with this name
     const std::string clean = SoundLibrary::sanitizeName(t);
     SoundLibrary& lib = SoundLibrary::instance();
-    std::string hint = "TYPE ON YOUR KEYBOARD OR CLICK THE KEYS.  ENTER = OK  ESC = CANCEL";
+    std::string hint = "TYPE OR CLICK THE KEYS.   ENTER = OK   ESC = CANCEL";
     uint32_t hintCol = p.muted;
     if (!clean.empty()) {
         const bool bank = modal_.namePurpose == kNameNewBank || modal_.namePurpose == kNameRenameBank;
@@ -1649,27 +1817,28 @@ void PixelLabsView::drawNameDialog(PixelCanvas& c, const Palette& p) {
         const std::string finalName = bank ? lib.uniqueBankName(clean, except) : lib.uniqueSoundName(clean, except);
         if (finalName != clean) { hint = "THAT NAME IS TAKEN - IT WILL BE SAVED AS " + finalName; hintCol = p.accent3; }
     }
-    textFit(c, x + 20, y + 94, w - 40, hint.c_str(), hintCol, 1);
+    ui::textFit(c, ui::kFontLight, x + 22, y + 90, w - 44, hint.c_str(), hintCol);
 
     // Clickable keys (arcade name entry)
     static const char* kKeyRows[4] = { "1234567890", "QWERTYUIOP", "ASDFGHJKL-", "ZXCVBNM.'&" };
     const int kx0 = x + 42;
-    auto keycap = [&](int kx, int ky, int kw, const char* label, int code, int scale) {
+    auto keycap = [&](int kx, int ky, int kw, const char* label, int code, int font) {
         const bool hv = hovered(kx, ky, kw, 22);
-        c.fillRect(kx + 2, ky + 2, kw, 22, p.shadow);
-        c.fillPixelBox(kx, ky, kw, 22, hv ? p.accent : p.inset, hv ? p.accent : p.border, 2);
-        drawPixelTextCentered(c, kx + kw / 2, ky + (22 - 7 * scale) / 2, label, hv ? p.bg : p.ink, scale);
+        const uint32_t f = slot(c, kx, ky, kw, 22, hv ? 2 : 0);
+        ui::textCentered(c, font, kx + kw / 2, ky + (22 - ui::capHeight(font)) / 2, label, inkOn(p, f));
         addHit(kx, ky, kw, 22, kHitNameKey, code);
     };
     for (int r = 0; r < 4; ++r) {
         for (int i = 0; kKeyRows[r][i]; ++i) {
             const char ch[2] = { kKeyRows[r][i], 0 };
-            keycap(kx0 + i * 40, y + 110 + r * 26, 36, ch, kKeyRows[r][i], 2);
+            keycap(kx0 + i * 40, y + 110 + r * 26, 36, ch, kKeyRows[r][i], ui::kFontTitle);
         }
     }
-    keycap(kx0, y + 214, 196, "SPACE", ' ', 1);
-    keycap(kx0 + 200, y + 214, 96, "DEL", 8, 1);
-    keycap(kx0 + 300, y + 214, 96, "CLEAR", 127, 1);
+    keycap(kx0, y + 214, 196, "SPACE", ' ', ui::kFontBody);
+    keycap(kx0 + 200, y + 214, 96, "DEL", 8, ui::kFontBody);
+    keycap(kx0 + 300, y + 214, 96, "CLEAR", 127, ui::kFontBody);
+
+    divider(c, x + w / 2, y + 248);
 
     const char* okLabel = modal_.namePurpose == kNameSaveSound ? "SAVE"
                         : modal_.namePurpose == kNameNewBank ? "CREATE" : "RENAME";
@@ -1681,10 +1850,15 @@ void PixelLabsView::drawNameDialog(PixelCanvas& c, const Palette& p) {
 
 void PixelLabsView::drawConfirmDialog(PixelCanvas& c, const Palette& p) {
     const int x = kConfirmX, y = kConfirmY, w = kConfirmW, h = kConfirmH;
-    dialogFrame(c, p, x, y, w, h);
-    drawPixelText(c, x + 20, y + 16, modal_.title.c_str(), p.accent, 2);
-    textFit(c, x + 20, y + 50, w - 40, modal_.line1.c_str(), p.ink, 1);
-    textFit(c, x + 20, y + 66, w - 40, modal_.line2.c_str(), p.muted, 1);
+    framePanel(c, x, y, w, h);
+    const bool danger = modal_.confirmPurpose != kConfirmUnsaved;
+    const ui::SpriteRect& ic = ui::rect(ui::kSprWarning);
+    ui::sprite(c, g_skin, ui::kSprWarning, x + 26, y + 18);
+    ui::textShadow(c, ui::kFontTitle, x + 26 + ic.w + 10, y + 20, modal_.title.c_str(), danger ? roleColor(p, ui::kRoleRed) : p.accent,
+                   p.shadow, 2);
+    divider(c, x + w / 2, y + 46);
+    ui::textFit(c, ui::kFontBody, x + 26, y + 66, w - 52, modal_.line1.c_str(), p.ink);
+    ui::textFit(c, ui::kFontLight, x + 26, y + 82, w - 52, modal_.line2.c_str(), p.muted);
     const int n = static_cast<int>(modal_.buttons.size());
     for (int i = 0; i < n; ++i) {
         const int bx = confirmBtnX(i, n);
@@ -1696,41 +1870,42 @@ void PixelLabsView::drawConfirmDialog(PixelCanvas& c, const Palette& p) {
 
 void PixelLabsView::drawBankPicker(PixelCanvas& c, const Palette& p) {
     const int x = kPickX, y = kPickY, w = kPickW, h = kPickH;
-    dialogFrame(c, p, x, y, w, h);
-    drawPixelText(c, x + 20, y + 16, "ADD TO BANK", p.accent, 2);
-    textFit(c, x + 20, y + 38, w - 40, soundName(modal_.pickerKey).c_str(), p.ink, 1);
+    framePanel(c, x, y, w, h);
+    ui::textShadow(c, ui::kFontTitle, x + 26, y + 16, "ADD TO BANK", p.accent, p.shadow, 2);
+    ui::textFit(c, ui::kFontBody, x + 26, y + 40, w - 52, soundName(modal_.pickerKey).c_str(), p.ink);
 
     const int nBanks = static_cast<int>(lib_.banks.size());
     const int n = nBanks + 1;
     modal_.pickerScroll = std::clamp(modal_.pickerScroll, 0, std::max(0, n - kPickRows));
-    insetBox(c, p, x + 20, kPickRowsTop - 2, w - 40, kPickRows * kPickRowH + 4);
+    well(c, p, x + 20, kPickRowsTop - 3, w - 40, kPickRows * kPickRowH + 5);
     for (int r = 0; r < kPickRows && modal_.pickerScroll + r < n; ++r) {
         const int idx = modal_.pickerScroll + r;
         const int ry = kPickRowsTop + r * kPickRowH;
-        const int rx = x + 24, rw = w - 54, rh = kPickRowH - 2;
+        const int rx = x + 24, rw = w - 58, rh = kPickRowH - 2;
         const bool hv = hovered(rx, ry, rw, rh);
-        if (hv) c.fillRect(rx, ry, rw, rh, p.panel);
+        const int ty = ry + (rh - ui::capHeight(ui::kFontBody)) / 2;
+        uint32_t face = p.inset;
+        if (hv) { ui::hbar(c, g_skin, ui::kSprFlatMid, rx, ry + (rh - kFlatH) / 2, rw, 4); face = faceColor(ui::kSprFlatMid); }
         if (idx == nBanks) {
-            drawPixelText(c, rx + 8, ry + 6, "+ NEW BANK...", hv ? p.accent : p.accent2, 1);
+            ui::text(c, ui::kFontBody, rx + 8, ty, "+ NEW BANK...", accentOn(p, face, hv ? p.accent3 : p.accent2));
             addHit(rx, ry, rw, rh, kHitPickerNew);
             continue;
         }
         const SoundBank& b = lib_.banks[idx];
         const bool in = std::find(b.items.begin(), b.items.end(), modal_.pickerKey) != b.items.end();
-        c.fillRect(rx + 6, ry + 4, 11, 11, hv ? p.accent : p.border);
-        c.fillRect(rx + 8, ry + 6, 7, 7, p.inset);
-        if (in) c.fillRect(rx + 9, ry + 7, 5, 5, p.accent3);
+        const ui::SpriteRect& rr = ui::rect(ui::kSprRuneGold0);
+        ui::sprite(c, g_skin, in ? ui::kSprRuneGold0 : ui::kSprRuneGrey0, rx + 4, ry + (rh - rr.h) / 2);
         char cnt[16];
         std::snprintf(cnt, sizeof(cnt), "%d", static_cast<int>(b.items.size()));
-        const int cw = measurePixelText(cnt, 1);
-        drawPixelText(c, rx + rw - 6 - cw, ry + 6, cnt, p.muted, 1);
-        textFit(c, rx + 24, ry + 6, rw - 40 - cw, b.name.c_str(), in ? p.ink : p.muted, 1);
+        const int cw = ui::textWidth(ui::kFontBody, cnt);
+        ui::text(c, ui::kFontBody, rx + rw - 6 - cw, ty, cnt, mutedOn(p, face));
+        ui::textFit(c, ui::kFontBody, rx + 24, ty, rw - 40 - cw, b.name.c_str(), in ? inkOn(p, face) : (hv ? accentOn(p, face, p.accent) : mutedOn(p, face)));
         addHit(rx, ry, rw, rh, kHitPickerBank, static_cast<int>(b.id));
     }
-    drawScrollbar(c, p, x + w - 26, kPickRowsTop, kPickRows * kPickRowH, kPickRows, n, modal_.pickerScroll);
-    textFit(c, x + 20, kPickRowsTop + kPickRows * kPickRowH + 10, w - 40,
-            nBanks ? "CLICK A BANK TO PUT THE SOUND IN OR TAKE IT OUT" : "NO BANKS YET - MAKE ONE WITH + NEW BANK",
-            p.muted, 1);
+    drawScrollbar(c, p, x + w - 30, kPickRowsTop - 2, kPickRows * kPickRowH + 2, kPickRows, n, modal_.pickerScroll);
+    ui::textFit(c, ui::kFontLight, x + 26, kPickRowsTop + kPickRows * kPickRowH + 10, w - 52,
+                nBanks ? "CLICK A BANK TO PUT THE SOUND IN OR TAKE IT OUT" : "NO BANKS YET - MAKE ONE WITH + NEW BANK",
+                p.muted);
     button(c, p, kPickDoneX, kPickBtnY, 110, 30, "DONE", true, hovered(kPickDoneX, kPickBtnY, 110, 30));
     addHit(kPickDoneX, kPickBtnY, 110, 30, kHitModalButton, kBtnDone);
 }

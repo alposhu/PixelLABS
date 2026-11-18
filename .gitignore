@@ -16,3 +16,8 @@ CMakeSettings.json
 # Generated audio / screenshots
 *.wav
 *.bmp
+
+# Licensed UI art: the Dark Ages UI pack may not be redistributed, so neither the
+# packs nor the tables baked from them are committed (see README, "Build from source")
+assets/
+src/gui/UiAssets.inc

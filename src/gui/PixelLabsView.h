@@ -26,29 +26,37 @@ public:
     static constexpr int kKeyboardLeft = 12, kWhiteKeyW = 26;
     static constexpr int kFirstKey = 36, kLastKey = 96; // 61 keys, C2..C7
 
-    static constexpr int kTabY = 58, kTabH = 24;
-    static int tabX(int t) { return 16 + t * 932 / kNumBrowserTabs; }
-    static int tabW(int t) { return tabX(t + 1) - tabX(t) - 4; }
+    // Tabs are sized to their labels; together they span x = 16..948
+    static constexpr int kTabY = 58, kTabH = 24, kTabGap = 4;
+    static constexpr int kTabWidths[kNumBrowserTabs] = { 60, 100, 100, 108, 104, 100, 118, 110, 100 };
+    static int tabX(int t) { int x = 16; for (int i = 0; i < t; ++i) x += kTabWidths[i] + kTabGap; return x; }
+    static int tabW(int t) { return kTabWidths[t]; }
 
-    static constexpr int kListX = 16, kListY = 90, kListW = 240, kListH = 310;
-    static constexpr int kRowsTop = 112, kRowH = 19, kVisibleRows = 13;
-    static constexpr int kRowX = 24, kRowW = 216;
-    static constexpr int kStarX = kRowX + kRowW - 7;            // centre of a row's star
-    static constexpr int kActionY = 368, kActionH = 24, kActionW = 72;
-    static constexpr int kSaveBtnX = 22, kSaveAsBtnX = 100, kBankBtnX = 178;
+    // Main windows (gold frames). Edge lengths minus the 24 px corners are multiples
+    // of 8 so the knotwork repeats cleanly.
+    static constexpr int kListX = 16, kListY = 90, kListW = 240, kListH = 312;
+    static constexpr int kHeroX = 266, kHeroY = 90, kHeroW = 368, kHeroH = 312;
+    static constexpr int kSoundX = 640, kSoundY = 90, kSoundW = 304, kSoundH = 312;
+    static constexpr int kRowsTop = 118, kRowH = 19, kVisibleRows = 12;
+    static constexpr int kRowX = 30, kRowW = 200;
+    static constexpr int kStarX = kRowX + kRowW - 8;            // centre of a row's star
+    static constexpr int kActionY = 352, kActionH = 24;
+    static constexpr int kSaveBtnX = 28, kSaveBtnW = 56;
+    static constexpr int kSaveAsBtnX = 88, kSaveAsBtnW = 82;
+    static constexpr int kBankBtnX = 174, kBankBtnW = 70;
     static constexpr int kHeaderStarX = 280, kHeaderStarY = 22; // centre
 
     static constexpr int kTouchX = 508, kTouchW = 136, kVelX = 652, kVelW = 114, kStripY = 408;
 
     // Dialogs
-    static constexpr int kNameDlgX = 240, kNameDlgY = 135, kNameDlgW = 480, kNameDlgH = 330;
+    static constexpr int kNameDlgX = 240, kNameDlgY = 135, kNameDlgW = 480, kNameDlgH = 328;
     static constexpr int kNameOkX = kNameDlgX + 320, kNameCancelX = kNameDlgX + 190, kNameBtnY = kNameDlgY + 280;
-    static constexpr int kConfirmX = 220, kConfirmY = 195, kConfirmW = 520, kConfirmH = 170;
+    static constexpr int kConfirmX = 220, kConfirmY = 195, kConfirmW = 520, kConfirmH = 168;
     static constexpr int kConfirmBtnY = kConfirmY + 120, kConfirmBtnW = 112, kConfirmBtnGap = 10;
     static int confirmBtnX(int i, int n) {
         return kConfirmX + kConfirmW - 20 - n * kConfirmBtnW - (n - 1) * kConfirmBtnGap + i * (kConfirmBtnW + kConfirmBtnGap);
     }
-    static constexpr int kPickX = 270, kPickY = 130, kPickW = 420, kPickH = 340;
+    static constexpr int kPickX = 268, kPickY = 128, kPickW = 424, kPickH = 344;
     static constexpr int kPickRowsTop = kPickY + 58, kPickRowH = 22, kPickRows = 9;
     static constexpr int kPickDoneX = kPickX + kPickW - 130, kPickBtnY = kPickY + 292;
 

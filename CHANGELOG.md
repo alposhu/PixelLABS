@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.0
+
+### Interface
+- **New look:** every window, button, tab, slider and dialog is drawn from the *Dark Ages UI* pixel-art pack: gold knotwork frames, a gilded plaque for the sound name, scroll-end buttons, jewel slider handles and a gem-LED ring around the macro dial.
+- **New type:** headings use *Abaddon Bold*, secondary text *Abaddon Light*, lists and values *BoldPixels*, and the dial value *Fibberish*. Preset names now show in their own upper and lower case.
+- **GILDED skin:** shows the art in its own colours and is the default for new instances. With AUTO, medieval sounds open in GILDED.
+- **Other skins:** NES, DMG, NEON, CODEX, ARCADE and PAPER recolour the same art. Text colours adapt to each surface so every skin stays readable.
+- **Projects:** a project keeps the skin it was saved with.
+- **Layout:** 12 list rows, tabs sized to their labels, and slider clicks now land where the handle goes.
+
+### Building from source
+- **UI art:** the art packs are not in git, because the *Dark Ages UI* licence forbids redistributing them. Download them into `assets/` (see README, "UI art"); the first build bakes them into `src/gui/UiAssets.inc` with `scripts/make_ui_assets.py`.
+
 ## 1.1.0
 
 ### Sound

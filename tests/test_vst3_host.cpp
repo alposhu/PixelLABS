@@ -461,6 +461,13 @@ int main(int argc, char** argv) {
             SendMessageW(childWnd, WM_LBUTTONUP, 0, MAKELPARAM(x, y));
         };
 
+        // A new instance opens in the GILDED skin
+        CHECK(snapshotOf(comp).theme == PixelLabs::kThemeGilded, "a new instance opens with the GILDED skin");
+        SendMessageW(childWnd, WM_TIMER, 1001, 0);
+        saveWindowBmp(childWnd, r.getWidth(), r.getHeight(), outPath("ui_gilded.bmp").c_str());
+        click(PixelLabs::PixelLabsView_kThemeX, PixelLabs::PixelLabsView_kThemeY); // GILDED -> AUTO
+        CHECK(snapshotOf(comp).theme == PixelLabs::kThemeAuto, "the skin button wraps round to AUTO");
+
         // One preset per era -> its demo song. Skin is AUTO so each shot shows the era skin.
         struct Shot { int preset; const char* wav; const char* bmp; double seconds; };
         const Shot shots[] = {
@@ -512,7 +519,7 @@ int main(int argc, char** argv) {
                 saveWindowBmp(childWnd, r.getWidth(), r.getHeight(), outPath("ui_skin_paper.bmp").c_str());
             }
         }
-        click(PixelLabs::PixelLabsView_kThemeX, PixelLabs::PixelLabsView_kThemeY); // back to AUTO
+        click(PixelLabs::PixelLabsView_kThemeX, PixelLabs::PixelLabsView_kThemeY); // PAPER -> GILDED for the library shots
 
         // ---- 5. Library: save as, unsaved-changes prompt, favourites, banks ----
         using V = PixelLabs::PixelLabsView;
@@ -527,7 +534,7 @@ int main(int argc, char** argv) {
             ctrl->setParamNormalized(PixelLabs::kParamPreset, 19.0 / kLast); // Neon Sunset Lead
             ctrl->setParamNormalized(PixelLabs::kParamDelay, 0.90);           // tweak an effect
             ctrl->setParamNormalized(PixelLabs::kParamCrush, 0.40);
-            clickF(V::kSaveAsBtnX + V::kActionW / 2, actionCy);               // SAVE AS -> name dialog
+            clickF(V::kSaveAsBtnX + V::kSaveAsBtnW / 2, actionCy);               // SAVE AS -> name dialog
             key(VK_DELETE);                                                   // clear the suggestion
             type("my neon");
             shot("ui_save_as.bmp");
@@ -593,7 +600,7 @@ int main(int argc, char** argv) {
             frame();
             CHECK(readFile(libFile).find("BANK\t") != std::string::npos &&
                   readFile(libFile).find("\tLIVE SET\t") != std::string::npos, "a named bank is created");
-            clickF(V::kBankBtnX + V::kActionW / 2, actionCy);                // + BANK -> picker
+            clickF(V::kBankBtnX + V::kBankBtnW / 2, actionCy);                // + BANK -> picker
             shot("ui_bank_picker.bmp");
             clickF(V::kPickX + 100, V::kPickRowsTop + 10);                    // first bank: LIVE SET
             clickF(V::kPickDoneX + 55, V::kPickBtnY + 15);                    // DONE
@@ -604,7 +611,7 @@ int main(int argc, char** argv) {
             shot("ui_banks.bmp");
 
             // Clicking keycaps types too; host key path (onKeyDown) works as well
-            clickF(V::kBankBtnX + V::kActionW / 2, actionCy);                // picker again
+            clickF(V::kBankBtnX + V::kBankBtnW / 2, actionCy);                // picker again
             clickF(V::kPickX + 100, V::kPickRowsTop + 10 + V::kPickRowH);     // "+ NEW BANK..."
             key(VK_DELETE);
             clickF(V::kNameDlgX + 42 + 0 * 40 + 18, V::kNameDlgY + 110 + 26 + 11); // Q
@@ -629,7 +636,7 @@ int main(int argc, char** argv) {
 
             // Computer-keyboard keys type into a dialog instead of playing notes
             renderBlocks(proc, 500, 512, nullptr, nullptr);                   // let every tail die
-            clickF(V::kSaveAsBtnX + V::kActionW / 2, actionCy);
+            clickF(V::kSaveAsBtnX + V::kSaveAsBtnW / 2, actionCy);
             key(VK_DELETE);
             std::vector<float> tailL, qL, qR;
             renderBlocks(proc, 20, 512, &tailL, nullptr);                     // echo tail still ringing

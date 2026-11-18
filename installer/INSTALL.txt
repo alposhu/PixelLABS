@@ -12,3 +12,10 @@ In REAPER: Options > Preferences > Plug-ins > VST > Re-scan
 (if it does not appear, use "Clear cache/re-scan").
 
 Prefer an installer? Use PixelLABS-Setup.exe from the same release.
+
+Credits
+-------
+
+Interface art: "Dark Ages UI" by Hypnobius (https://hypnobius.itch.io/)
+Fonts: "BoldPixels" by YukiPixels (https://yukipixels.itch.io/boldpixels, CC BY-SA 4.0),
+       "Abaddon" and "Fibberish" by Caffinate / Nathan Scott (https://caffinate.itch.io/)

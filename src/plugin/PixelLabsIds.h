@@ -106,8 +106,9 @@ enum BrowserTabs {
     kNumBrowserTabs
 };
 
-static constexpr int kNumThemes = 7;   // 0 = AUTO (follow preset era), 1..6 fixed skins
-enum Themes { kThemeAuto = 0, kThemeNes, kThemeDmg, kThemeNeon, kThemeCodex, kThemeArcade, kThemePaper };
+static constexpr int kNumThemes = 8;   // 0 = AUTO (follow preset era), 1..7 fixed skins (append only)
+enum Themes { kThemeAuto = 0, kThemeNes, kThemeDmg, kThemeNeon, kThemeCodex, kThemeArcade, kThemePaper, kThemeGilded };
+static constexpr int kDefaultTheme = kThemeGilded; // new instances; projects keep the skin they saved
 static constexpr int kNumUiScales = 4; // 100 / 125 / 150 / 200 %
 
 inline float listToNorm(int idx, int count) {
@@ -163,7 +164,7 @@ struct StateSnapshot {
 struct SharedUITelemetry {
     std::atomic<float> params[kNumParams];
     std::atomic<int> activeMacro{0};
-    std::atomic<int> theme{0};
+    std::atomic<int> theme{kDefaultTheme};
     std::atomic<int> uiScale{0};
     std::atomic<int> eraTab{0};       // 0 = ALL, 1..kNumEras
     std::atomic<int> currentPreset{0};
